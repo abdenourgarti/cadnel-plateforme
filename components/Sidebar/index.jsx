@@ -4,23 +4,35 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
   FaCog, FaUsers, FaCalendarAlt, FaClipboardList,
-  FaChartBar, FaChevronDown, FaChevronUp
+  FaChartBar, FaChevronDown, FaChevronUp, 
 } from 'react-icons/fa';
+import { MdSpaceDashboard } from "react-icons/md";
 
 const menuSections = [
   {
-    title: "Gestion Paramètre",
+    title: "Tableau de bord",
+    icon: MdSpaceDashboard,
+    path: "/Dashboard"
+  },
+  {
+    title: "Gestion Fichiers",
     icon: FaCog,
     subMenu: [
-      { title: "Zone", path: "/parametres/zone" },
-      { title: "Département", path: "/parametres/departement" },
-      { title: "Type de congé", path: "/parametres/type-conge" },
+      { title: "Département", path: "/Departements" },
+      { title: "Zone", path: "/fichiers/zone" },
+      { title: "Postes", path: "/fichiers/postes" },
+      { title: "Appareil", path: "/fichiers/appareil" }
     ]
   },
   {
     title: "Gestion des employés",
     icon: FaUsers,
     path: "/employes"
+  },
+  {
+    title: "Présences en temps réel",
+    icon: FaClipboardList,
+    path: "/presences-temps-reel"
   },
   {
     title: "Gestion des Plannings",
@@ -37,13 +49,6 @@ const menuSections = [
       { title: "Absence", path: "/autorisations/absence" },
       { title: "Retard", path: "/autorisations/retard" },
       { title: "Congé", path: "/autorisations/conge" },
-    ]
-  },
-  {
-    title: "Gestion des présences",
-    icon: FaClipboardList,
-    subMenu: [
-      { title: "Présences en temps réel", path: "/presences/temps-reel" },
     ]
   },
   {

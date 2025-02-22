@@ -26,7 +26,7 @@ const LoginPage = () => {
     },
     validationSchema,
     onSubmit: (values) => {
-        router.push('/Accueil');
+        router.push('/Dashboard');
     }
   });
 

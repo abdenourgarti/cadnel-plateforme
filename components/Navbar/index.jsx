@@ -9,13 +9,13 @@ const Navbar = ({ sidebarOpen, setSidebarOpen }) => {
   const username = "John Doe"; // À remplacer par le vrai username
 
   return (
-    <nav className="fixed top-0 left-0 right-0 h-16 bg-emerald-600 shadow-lg z-50">
+    <nav className="fixed top-0 left-0 right-0 h-16 bg-white border border-b-emerald-600 shadow-lg z-50">
       <div className="flex items-center justify-between h-full px-4">
         {/* Logo et Bouton Toggle */}
         <div className="flex items-center">
           <button
             onClick={() => setSidebarOpen(!sidebarOpen)}
-            className="text-white p-2 hover:bg-emerald-700 rounded-lg"
+            className="text-emerald-600 p-2 hover:border hover:border-emerald-700 rounded-lg"
           >
             <FaBars size={24} />
           </button>
@@ -29,7 +29,7 @@ const Navbar = ({ sidebarOpen, setSidebarOpen }) => {
         </div>
 
         {/* Nom de l'entreprise */}
-        <h1 className="text-white text-xl font-semibold hidden md:block">
+        <h1 className="text-emerald-600 text-xl font-semibold hidden md:block">
           Nom de l'entreprise
         </h1>
 
@@ -37,7 +37,7 @@ const Navbar = ({ sidebarOpen, setSidebarOpen }) => {
         <div className="relative">
           <button
             onClick={() => setDropdownOpen(!dropdownOpen)}
-            className="flex items-center space-x-2 text-white px-4 py-2 rounded-lg hover:bg-emerald-700"
+            className="flex items-center space-x-2 text-emerald-600 px-4 py-2 rounded-lg hover:border hover:border-emerald-700"
           >
             <FaUser />
             <span className="hidden md:block">{username}</span>
