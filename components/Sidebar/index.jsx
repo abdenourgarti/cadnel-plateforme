@@ -19,15 +19,15 @@ const menuSections = [
     icon: FaCog,
     subMenu: [
       { title: "Département", path: "/Departements" },
-      { title: "Zone", path: "/fichiers/zone" },
-      { title: "Postes", path: "/fichiers/postes" },
-      { title: "Appareil", path: "/fichiers/appareil" }
+      { title: "Zone", path: "/Zones" },
+      { title: "Postes", path: "/Postes" },
+      { title: "Appareil", path: "/Appareils" }
     ]
   },
   {
     title: "Gestion des employés",
     icon: FaUsers,
-    path: "/employes"
+    path: "/Employes"
   },
   {
     title: "Présences en temps réel",
