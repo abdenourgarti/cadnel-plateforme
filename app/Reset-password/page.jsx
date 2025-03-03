@@ -2,31 +2,38 @@
 import React, { useState } from 'react';
 import { useFormik } from 'formik';
 import * as Yup from 'yup';
-import { FaEye, FaEyeSlash, FaEnvelope, FaLock } from 'react-icons/fa';
+import { FaEye, FaEyeSlash, FaLock, FaKey } from 'react-icons/fa';
 import Image from 'next/image';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 
-const LoginPage = () => {
+const ResetPasswordPage = () => {
   const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const router = useRouter();
 
   const validationSchema = Yup.object({
-    email: Yup.string()
-      .email('Adresse email invalide')
-      .required('L\'email est requis'),
+    code: Yup.string()
+      .required('Le code est requis')
+      .min(6, 'Le code doit contenir au moins 6 caractères'),
     password: Yup.string()
       .required('Le mot de passe est requis')
+      .min(8, 'Le mot de passe doit contenir au moins 8 caractères'),
+    confirmPassword: Yup.string()
+      .required('Veuillez confirmer votre mot de passe')
+      .oneOf([Yup.ref('password')], 'Les mots de passe ne correspondent pas'),
   });
 
   const formik = useFormik({
     initialValues: {
-      email: '',
-      password: ''
+      code: '',
+      password: '',
+      confirmPassword: '',
     },
     validationSchema,
     onSubmit: (values) => {
-        router.push('/Dashboard');
+      // Ici, vous implémenteriez la logique de réinitialisation du mot de passe
+      router.push('/');
     }
   });
 
@@ -51,29 +58,29 @@ const LoginPage = () => {
                 className="h-20 w-auto"
               />
             </div>
-            <h2 className="text-3xl font-bold text-center text-gray-800 mb-2">Bienvenue</h2>
-            <p className="text-center text-gray-600">Connectez-vous à votre espace personnel</p>
+            <h2 className="text-3xl font-bold text-center text-gray-800 mb-2">Réinitialiser le mot de passe</h2>
+            <p className="text-center text-gray-600">Entrez le code reçu et votre nouveau mot de passe</p>
           </div>
 
           <form onSubmit={formik.handleSubmit} className="space-y-6">
             <div className="space-y-4">
-              {/* Email field */}
+              {/* Code field */}
               <div>
                 <div className="relative">
                   <div className="absolute inset-y-0 left-0 flex items-center pl-3">
-                    <FaEnvelope className="h-5 w-5 text-emerald-500" />
+                    <FaKey className="h-5 w-5 text-emerald-500" />
                   </div>
                   <input
-                    id="email"
-                    name="email"
-                    type="email"
-                    placeholder="Email ou nom d'utilisateur"
+                    id="code"
+                    name="code"
+                    type="text"
+                    placeholder="Code de vérification"
                     className="w-full pl-10 pr-4 py-3 rounded-lg border border-gray-200 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 transition-all duration-200 bg-gray-50"
-                    {...formik.getFieldProps('email')}
+                    {...formik.getFieldProps('code')}
                   />
                 </div>
-                {formik.touched.email && formik.errors.email && (
-                  <div className="text-red-500 text-sm mt-1 ml-2">{formik.errors.email}</div>
+                {formik.touched.code && formik.errors.code && (
+                  <div className="text-red-500 text-sm mt-1 ml-2">{formik.errors.code}</div>
                 )}
               </div>
 
@@ -87,7 +94,7 @@ const LoginPage = () => {
                     id="password"
                     name="password"
                     type={showPassword ? 'text' : 'password'}
-                    placeholder="Mot de passe"
+                    placeholder="Nouveau mot de passe"
                     className="w-full pl-10 pr-12 py-3 rounded-lg border border-gray-200 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 transition-all duration-200 bg-gray-50"
                     {...formik.getFieldProps('password')}
                   />
@@ -103,24 +110,50 @@ const LoginPage = () => {
                   <div className="text-red-500 text-sm mt-1 ml-2">{formik.errors.password}</div>
                 )}
               </div>
-            </div>
 
-            <div className="flex items-center justify-between mt-6">
-              
-              <Link
-                href="/Forget-password"
-                className="text-sm text-emerald-600 hover:text-emerald-700 font-medium"
-              >
-                Mot de passe oublié ?
-              </Link>
+              {/* Confirm Password field */}
+              <div>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 flex items-center pl-3">
+                    <FaLock className="h-5 w-5 text-emerald-500" />
+                  </div>
+                  <input
+                    id="confirmPassword"
+                    name="confirmPassword"
+                    type={showConfirmPassword ? 'text' : 'password'}
+                    placeholder="Confirmer le mot de passe"
+                    className="w-full pl-10 pr-12 py-3 rounded-lg border border-gray-200 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 transition-all duration-200 bg-gray-50"
+                    {...formik.getFieldProps('confirmPassword')}
+                  />
+                  <button
+                    type="button"
+                    className="absolute inset-y-0 right-0 flex items-center pr-3 text-gray-400 hover:text-gray-600"
+                    onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                  >
+                    {showConfirmPassword ? <FaEyeSlash className="h-5 w-5" /> : <FaEye className="h-5 w-5" />}
+                  </button>
+                </div>
+                {formik.touched.confirmPassword && formik.errors.confirmPassword && (
+                  <div className="text-red-500 text-sm mt-1 ml-2">{formik.errors.confirmPassword}</div>
+                )}
+              </div>
             </div>
 
             <button
               type="submit"
               className="w-full py-3 px-4 bg-gradient-to-r from-emerald-600 to-emerald-500 text-white font-medium rounded-lg hover:from-emerald-700 hover:to-emerald-600 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 transform transition-all duration-200 hover:scale-[1.02] shadow-lg"
             >
-              Se connecter
+              Réinitialiser le mot de passe
             </button>
+
+            <div className="text-center mt-6">
+              <Link
+                href="/"
+                className="text-sm text-emerald-600 hover:text-emerald-700 font-medium"
+              >
+                Retour à la connexion
+              </Link>
+            </div>
           </form>
         </div>
 
@@ -147,4 +180,4 @@ const LoginPage = () => {
   );
 };
 
-export default LoginPage;
+export default ResetPasswordPage;

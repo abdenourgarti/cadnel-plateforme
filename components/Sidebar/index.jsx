@@ -18,6 +18,8 @@ const menuSections = [
     title: "Gestion Fichiers",
     icon: FaCog,
     subMenu: [
+      { title: 'Entreprise', path: "/Companies"},
+      { title: 'Utilisateurs', path: "/Users"},
       { title: "Département", path: "/Departements" },
       { title: "Zone", path: "/Zones" },
       { title: "Postes", path: "/Postes" },
@@ -46,9 +48,9 @@ const menuSections = [
     title: "Gestion des autorisations",
     icon: FaClipboardList,
     subMenu: [
-      { title: "Absence", path: "/autorisations/absence" },
-      { title: "Retard", path: "/autorisations/retard" },
-      { title: "Congé", path: "/autorisations/conge" },
+      { title: "Absence", path: "/Absence" },
+      { title: "Retard", path: "/Retard" },
+      { title: "Congé", path: "/Conge" },
     ]
   },
   {

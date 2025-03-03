@@ -2,31 +2,28 @@
 import React, { useState } from 'react';
 import { useFormik } from 'formik';
 import * as Yup from 'yup';
-import { FaEye, FaEyeSlash, FaEnvelope, FaLock } from 'react-icons/fa';
+import { FaEnvelope } from 'react-icons/fa';
 import Image from 'next/image';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 
-const LoginPage = () => {
-  const [showPassword, setShowPassword] = useState(false);
+const ForgotPasswordPage = () => {
   const router = useRouter();
 
   const validationSchema = Yup.object({
     email: Yup.string()
       .email('Adresse email invalide')
       .required('L\'email est requis'),
-    password: Yup.string()
-      .required('Le mot de passe est requis')
   });
 
   const formik = useFormik({
     initialValues: {
       email: '',
-      password: ''
     },
     validationSchema,
     onSubmit: (values) => {
-        router.push('/Dashboard');
+      // Ici, vous implémenteriez la logique d'envoi du code de réinitialisation
+      router.push('/Reset-password');
     }
   });
 
@@ -51,8 +48,8 @@ const LoginPage = () => {
                 className="h-20 w-auto"
               />
             </div>
-            <h2 className="text-3xl font-bold text-center text-gray-800 mb-2">Bienvenue</h2>
-            <p className="text-center text-gray-600">Connectez-vous à votre espace personnel</p>
+            <h2 className="text-3xl font-bold text-center text-gray-800 mb-2">Mot de passe oublié</h2>
+            <p className="text-center text-gray-600">Entrez votre email pour recevoir un code de réinitialisation</p>
           </div>
 
           <form onSubmit={formik.handleSubmit} className="space-y-6">
@@ -67,7 +64,7 @@ const LoginPage = () => {
                     id="email"
                     name="email"
                     type="email"
-                    placeholder="Email ou nom d'utilisateur"
+                    placeholder="Votre adresse email"
                     className="w-full pl-10 pr-4 py-3 rounded-lg border border-gray-200 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 transition-all duration-200 bg-gray-50"
                     {...formik.getFieldProps('email')}
                   />
@@ -76,51 +73,23 @@ const LoginPage = () => {
                   <div className="text-red-500 text-sm mt-1 ml-2">{formik.errors.email}</div>
                 )}
               </div>
-
-              {/* Password field */}
-              <div>
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 flex items-center pl-3">
-                    <FaLock className="h-5 w-5 text-emerald-500" />
-                  </div>
-                  <input
-                    id="password"
-                    name="password"
-                    type={showPassword ? 'text' : 'password'}
-                    placeholder="Mot de passe"
-                    className="w-full pl-10 pr-12 py-3 rounded-lg border border-gray-200 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 transition-all duration-200 bg-gray-50"
-                    {...formik.getFieldProps('password')}
-                  />
-                  <button
-                    type="button"
-                    className="absolute inset-y-0 right-0 flex items-center pr-3 text-gray-400 hover:text-gray-600"
-                    onClick={() => setShowPassword(!showPassword)}
-                  >
-                    {showPassword ? <FaEyeSlash className="h-5 w-5" /> : <FaEye className="h-5 w-5" />}
-                  </button>
-                </div>
-                {formik.touched.password && formik.errors.password && (
-                  <div className="text-red-500 text-sm mt-1 ml-2">{formik.errors.password}</div>
-                )}
-              </div>
-            </div>
-
-            <div className="flex items-center justify-between mt-6">
-              
-              <Link
-                href="/Forget-password"
-                className="text-sm text-emerald-600 hover:text-emerald-700 font-medium"
-              >
-                Mot de passe oublié ?
-              </Link>
             </div>
 
             <button
               type="submit"
               className="w-full py-3 px-4 bg-gradient-to-r from-emerald-600 to-emerald-500 text-white font-medium rounded-lg hover:from-emerald-700 hover:to-emerald-600 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 transform transition-all duration-200 hover:scale-[1.02] shadow-lg"
             >
-              Se connecter
+              Envoyer le code
             </button>
+
+            <div className="text-center mt-6">
+              <Link
+                href="/"
+                className="text-sm text-emerald-600 hover:text-emerald-700 font-medium"
+              >
+                Retour à la connexion
+              </Link>
+            </div>
           </form>
         </div>
 
@@ -147,4 +116,4 @@ const LoginPage = () => {
   );
 };
 
-export default LoginPage;
+export default ForgotPasswordPage;

@@ -47,6 +47,19 @@ export default function Departments() {
             : dep
         );
         setDepartments(updatedDepartments);
+
+        // axios.post("YOUR_API_ENDPOINT", values, {
+        //   headers: {
+        //     Authorization: `Bearer ${localStorage.getItem("accessToken")}`
+        //   }
+        // })
+        // .then(response => {
+        //   console.log("Success:", response.data);
+        // })
+        // .catch(error => {
+        //   console.error("Error:", error);
+        // });
+        
         
         toast.success('Département modifié avec succès', {
           position: "top-right",
