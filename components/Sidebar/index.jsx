@@ -39,10 +39,7 @@ const menuSections = [
   {
     title: "Gestion des Plannings",
     icon: FaCalendarAlt,
-    subMenu: [
-      { title: "Gestion des horaires", path: "/plannings/horaires" },
-      { title: "Programme des horaires", path: "/plannings/programme" },
-    ]
+    path: "/Planning"
   },
   {
     title: "Gestion des autorisations",
@@ -54,7 +51,7 @@ const menuSections = [
     ]
   },
   {
-    title: "Rapport des présences",
+    title: "Rapports",
     icon: FaChartBar,
     subMenu: [
       { title: "Point des retards et absences", path: "/rapports/retards-absences" },
