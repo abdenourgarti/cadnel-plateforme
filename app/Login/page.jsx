@@ -1,15 +1,47 @@
 'use client'
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useFormik } from 'formik';
 import * as Yup from 'yup';
 import { FaEye, FaEyeSlash, FaEnvelope, FaLock } from 'react-icons/fa';
 import Image from 'next/image';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { useAuth } from '@/app/context/AuthContext';
+
+// Données utilisateurs prédéfinies
+const users = [
+  {
+    id: "1",
+    email: "userone@gmail.com",
+    password: "password",
+    name: "User One",
+    role: "user",
+    companyId: "A123",
+    companyName: "Entreprise A"
+  },
+  {
+    id: "2",
+    email: "usertwo@gmail.com",
+    password: "password",
+    name: "User Two",
+    role: "admin",
+    companyId: null,
+    companyName: null
+  }
+];
 
 const LoginPage = () => {
   const [showPassword, setShowPassword] = useState(false);
+  const [loginError, setLoginError] = useState('');
   const router = useRouter();
+  const { login, user } = useAuth();
+
+  // Vérifier si déjà connecté au chargement de la page
+  useEffect(() => {
+    if (user) {
+      router.push('/Dashboard');
+    }
+  }, [user, router]);
 
   const validationSchema = Yup.object({
     email: Yup.string()
@@ -26,7 +58,23 @@ const LoginPage = () => {
     },
     validationSchema,
     onSubmit: (values) => {
-        router.push('/Dashboard');
+      // Vérifier les identifiants
+      const foundUser = users.find(user => user.email === values.email && user.password === values.password);
+      
+      if (foundUser) {
+        // Utiliser la fonction login du contexte
+        login({
+          id: foundUser.id,
+          name: foundUser.name,
+          email: foundUser.email,
+          role: foundUser.role,
+          companyId: foundUser.companyId,
+          companyName: foundUser.companyName
+        });
+      } else {
+        // Afficher un message d'erreur
+        setLoginError('Email ou mot de passe incorrect');
+      }
     }
   });
 
@@ -54,6 +102,12 @@ const LoginPage = () => {
             <h2 className="text-3xl font-bold text-center text-gray-800 mb-2">Bienvenue</h2>
             <p className="text-center text-gray-600">Connectez-vous à votre espace personnel</p>
           </div>
+
+          {loginError && (
+            <div className="mb-4 p-3 bg-red-100 text-red-700 rounded-lg text-center">
+              {loginError}
+            </div>
+          )}
 
           <form onSubmit={formik.handleSubmit} className="space-y-6">
             <div className="space-y-4">
@@ -106,7 +160,6 @@ const LoginPage = () => {
             </div>
 
             <div className="flex items-center justify-between mt-6">
-              
               <Link
                 href="/Forget-password"
                 className="text-sm text-emerald-600 hover:text-emerald-700 font-medium"

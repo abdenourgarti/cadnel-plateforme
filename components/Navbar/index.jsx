@@ -3,10 +3,18 @@ import { useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { FaUser, FaChevronDown, FaChevronUp, FaBars } from 'react-icons/fa';
+import { useAuth } from '@/app/context/AuthContext';
+import { useRouter } from 'next/navigation';
 
 const Navbar = ({ sidebarOpen, setSidebarOpen }) => {
   const [dropdownOpen, setDropdownOpen] = useState(false);
-  const username = "John Doe"; // À remplacer par le vrai username
+  const { user, logout } = useAuth();
+  const router = useRouter();
+
+  const handleLogout = () => {
+    logout();
+    setDropdownOpen(false);
+  };
 
   return (
     <nav className="fixed top-0 left-0 right-0 h-16 bg-white border border-b-emerald-600 shadow-lg z-50">
@@ -28,9 +36,9 @@ const Navbar = ({ sidebarOpen, setSidebarOpen }) => {
           />
         </div>
 
-        {/* Nom de l'entreprise */}
+        {/* Nom de l'entreprise ou Role Admin */}
         <h1 className="text-emerald-600 text-xl font-semibold hidden md:block">
-          Nom de l'entreprise
+          {user?.role === 'admin' ? 'Admin Panel' : user?.companyName || 'Nom de l\'entreprise'}
         </h1>
 
         {/* Profil utilisateur */}
@@ -40,7 +48,7 @@ const Navbar = ({ sidebarOpen, setSidebarOpen }) => {
             className="flex items-center space-x-2 text-emerald-600 px-4 py-2 rounded-lg hover:border hover:border-emerald-700"
           >
             <FaUser />
-            <span className="hidden md:block">{username}</span>
+            <span className="hidden md:block">{user?.name || 'Utilisateur'}</span>
             {dropdownOpen ? <FaChevronUp /> : <FaChevronDown />}
           </button>
 
@@ -48,17 +56,17 @@ const Navbar = ({ sidebarOpen, setSidebarOpen }) => {
           {dropdownOpen && (
             <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg py-1">
               <Link
-                href="/change-password"
+                href="/Change-password"
                 className="block px-4 py-2 text-gray-700 hover:bg-gray-100"
               >
                 Changer le mot de passe
               </Link>
-              <Link
-                href="/Login"
-                className="block px-4 py-2 text-gray-700 hover:bg-gray-100"
+              <button
+                onClick={handleLogout}
+                className="block w-full text-left px-4 py-2 text-gray-700 hover:bg-gray-100"
               >
                 Se déconnecter
-              </Link>
+              </button>
             </div>
           )}
         </div>
