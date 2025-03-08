@@ -13,27 +13,55 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
   const pathname = usePathname();
   const [isAdmin, setIsAdmin] = useState(false);
   const [menuSections, setMenuSections] = useState([]);
+  const [isMobile, setIsMobile] = useState(false);
+
+  // Fonction sécurisée pour fermer la sidebar
+  const closeSidebar = () => {
+    if (typeof setIsOpen === 'function') {
+      setIsOpen(false);
+    }
+  };
 
   useEffect(() => {
     // Vérifier si l'utilisateur est admin
-    const user = JSON.parse(localStorage.getItem('user'))
-    const userRole = user.role;
-    setIsAdmin(userRole === 'admin');
-    console.log(user)
+    try {
+      const user = JSON.parse(localStorage.getItem('user'));
+      if (user && user.role) {
+        setIsAdmin(user.role === 'admin');
+        console.log('User data:', user);
+      }
+    } catch (error) {
+      console.error('Error parsing user data:', error);
+    }
 
-    // Fermer automatiquement le sidebar sur les petits écrans
-    const handleResize = () => {
-      if (window.innerWidth < 768) {
-        setIsOpen(false);
+    // Fonction pour vérifier la taille de l'écran
+    const checkScreenSize = () => {
+      const mobile = window.innerWidth < 768;
+      setIsMobile(mobile);
+      
+      // Fermer automatiquement si on est sur mobile
+      if (mobile) {
+        closeSidebar();
       }
     };
 
-    window.addEventListener('resize', handleResize);
+    // Vérifier la taille initiale
+    checkScreenSize();
+    
+    // Ajouter l'écouteur d'événement pour les changements de taille
+    window.addEventListener('resize', checkScreenSize);
     
     return () => {
-      window.removeEventListener('resize', handleResize);
+      window.removeEventListener('resize', checkScreenSize);
     };
-  }, [setIsOpen]);
+  }, []);
+
+  // Fermer le sidebar lors des changements de route sur mobile
+  useEffect(() => {
+    if (isMobile) {
+      closeSidebar();
+    }
+  }, [pathname, isMobile]);
 
   useEffect(() => {
     // Définir les sections du menu en fonction du rôle
@@ -126,25 +154,25 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
 
   // Fermer le sidebar quand on clique sur un lien sur les petits écrans
   const handleLinkClick = () => {
-    if (window.innerWidth < 768) {
-      setIsOpen(false);
+    if (isMobile) {
+      closeSidebar();
     }
   };
 
   return (
     <>
       {/* Overlay pour fermer le sidebar sur mobile quand il est ouvert */}
-      {isOpen && (
+      {isOpen && typeof setIsOpen === 'function' && (
         <div 
           className="md:hidden fixed inset-0 bg-black bg-opacity-50 z-10"
-          onClick={() => setIsOpen(false)}
+          onClick={() => closeSidebar()}
         />
       )}
       
       <div
         className={`fixed top-16 left-0 h-[calc(100vh-4rem)] w-64 bg-emerald-600 transition-transform duration-300 ease-in-out transform z-20 ${
           isOpen ? 'translate-x-0' : '-translate-x-full'
-        } overflow-y-auto`}
+        } md:translate-x-0 md:${isMobile ? '-translate-x-full' : ''} overflow-y-auto`}
       >
         <div className="py-4">
           {menuSections.map((section) => (
