@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
   FaCog, FaUsers, FaCalendarAlt, FaClipboardList,
-  FaChartBar, FaChevronDown, FaChevronUp, 
+  FaChartBar, FaChevronDown, FaChevronUp, FaBuilding
 } from 'react-icons/fa';
 import { MdSpaceDashboard } from "react-icons/md";
 
@@ -72,8 +72,8 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
         path: "/Dashboard"
       },
       {
-        title: "Gestion Fichiers",
-        icon: FaCog,
+        title: "Gestion Entreprise",
+        icon: FaBuilding,
         subMenu: [
           ...(isAdmin ? [
             { title: 'Entreprise', path: "/Companies"},
@@ -116,6 +116,11 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
           { title: "Point des retards et absences", path: "/Rapports" },
           { title: "État de ponctualité", path: "/Etat-ponctualite" },
         ]
+      },
+      {
+        title: "Paramètres",
+        icon: FaCog,
+        path: "/Settings"
       },
     ];
 

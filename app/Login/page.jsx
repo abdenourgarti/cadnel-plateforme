@@ -5,7 +5,7 @@ import * as Yup from 'yup';
 import { FaEye, FaEyeSlash, FaEnvelope, FaLock } from 'react-icons/fa';
 import Image from 'next/image';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/app/context/AuthContext';
 
 // Données utilisateurs prédéfinies
@@ -33,7 +33,9 @@ const users = [
 const LoginPage = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [loginError, setLoginError] = useState('');
+  const [sessionExpired, setSessionExpired] = useState(false);
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { login, user } = useAuth();
 
   // Vérifier si déjà connecté au chargement de la page
@@ -41,7 +43,17 @@ const LoginPage = () => {
     if (user) {
       router.push('/Dashboard');
     }
-  }, [user, router]);
+    
+    // Vérifier si la session a expiré (paramètre URL)
+    const expired = searchParams.get('expired');
+    if (expired === 'true') {
+      setSessionExpired(true);
+      setLoginError('Votre session a expiré. Veuillez vous reconnecter.');
+      
+      // Nettoyer l'URL
+      window.history.replaceState({}, document.title, '/');
+    }
+  }, [user, router, searchParams]);
 
   const validationSchema = Yup.object({
     email: Yup.string()
@@ -58,6 +70,10 @@ const LoginPage = () => {
     },
     validationSchema,
     onSubmit: (values) => {
+      // Réinitialiser les messages d'erreur
+      setLoginError('');
+      setSessionExpired(false);
+      
       // Vérifier les identifiants
       const foundUser = users.find(user => user.email === values.email && user.password === values.password);
       
@@ -103,7 +119,13 @@ const LoginPage = () => {
             <p className="text-center text-gray-600">Connectez-vous à votre espace personnel</p>
           </div>
 
-          {loginError && (
+          {sessionExpired && (
+            <div className="mb-4 p-3 bg-amber-100 text-amber-700 rounded-lg text-center">
+              Votre session a expiré. Veuillez vous reconnecter.
+            </div>
+          )}
+
+          {loginError && !sessionExpired && (
             <div className="mb-4 p-3 bg-red-100 text-red-700 rounded-lg text-center">
               {loginError}
             </div>
