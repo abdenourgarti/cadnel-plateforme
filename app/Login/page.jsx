@@ -1,5 +1,5 @@
 'use client'
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, Suspense } from 'react';
 import { useFormik } from 'formik';
 import * as Yup from 'yup';
 import { FaEye, FaEyeSlash, FaEnvelope, FaLock } from 'react-icons/fa';
@@ -30,7 +30,8 @@ const users = [
   }
 ];
 
-const LoginPage = () => {
+// Composant avec useSearchParams
+function LoginForm() {
   const [showPassword, setShowPassword] = useState(false);
   const [loginError, setLoginError] = useState('');
   const [sessionExpired, setSessionExpired] = useState(false);
@@ -95,6 +96,97 @@ const LoginPage = () => {
   });
 
   return (
+    <>
+      {sessionExpired && (
+        <div className="mb-4 p-3 bg-amber-100 text-amber-700 rounded-lg text-center">
+          Votre session a expiré. Veuillez vous reconnecter.
+        </div>
+      )}
+
+      {loginError && !sessionExpired && (
+        <div className="mb-4 p-3 bg-red-100 text-red-700 rounded-lg text-center">
+          {loginError}
+        </div>
+      )}
+
+      <form onSubmit={formik.handleSubmit} className="space-y-6">
+        <div className="space-y-4">
+          {/* Email field */}
+          <div>
+            <div className="relative">
+              <div className="absolute inset-y-0 left-0 flex items-center pl-3">
+                <FaEnvelope className="h-5 w-5 text-emerald-500" />
+              </div>
+              <input
+                id="email"
+                name="email"
+                type="email"
+                placeholder="Email ou nom d'utilisateur"
+                className="w-full pl-10 pr-4 py-3 rounded-lg border border-gray-200 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 transition-all duration-200 bg-gray-50"
+                {...formik.getFieldProps('email')}
+              />
+            </div>
+            {formik.touched.email && formik.errors.email && (
+              <div className="text-red-500 text-sm mt-1 ml-2">{formik.errors.email}</div>
+            )}
+          </div>
+
+          {/* Password field */}
+          <div>
+            <div className="relative">
+              <div className="absolute inset-y-0 left-0 flex items-center pl-3">
+                <FaLock className="h-5 w-5 text-emerald-500" />
+              </div>
+              <input
+                id="password"
+                name="password"
+                type={showPassword ? 'text' : 'password'}
+                placeholder="Mot de passe"
+                className="w-full pl-10 pr-12 py-3 rounded-lg border border-gray-200 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 transition-all duration-200 bg-gray-50"
+                {...formik.getFieldProps('password')}
+              />
+              <button
+                type="button"
+                className="absolute inset-y-0 right-0 flex items-center pr-3 text-gray-400 hover:text-gray-600"
+                onClick={() => setShowPassword(!showPassword)}
+              >
+                {showPassword ? <FaEyeSlash className="h-5 w-5" /> : <FaEye className="h-5 w-5" />}
+              </button>
+            </div>
+            {formik.touched.password && formik.errors.password && (
+              <div className="text-red-500 text-sm mt-1 ml-2">{formik.errors.password}</div>
+            )}
+          </div>
+        </div>
+
+        <div className="flex items-center justify-between mt-6">
+          <Link
+            href="/Forget-password"
+            className="text-sm text-emerald-600 hover:text-emerald-700 font-medium"
+          >
+            Mot de passe oublié ?
+          </Link>
+        </div>
+
+        <button
+          type="submit"
+          className="w-full py-3 px-4 bg-gradient-to-r from-emerald-600 to-emerald-500 text-white font-medium rounded-lg hover:from-emerald-700 hover:to-emerald-600 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 transform transition-all duration-200 hover:scale-[1.02] shadow-lg"
+        >
+          Se connecter
+        </button>
+      </form>
+    </>
+  );
+}
+
+// Chargement pendant le suspense
+function LoginLoading() {
+  return <div className="animate-pulse text-center py-4">Chargement...</div>;
+}
+
+// Page de login principale
+const LoginPage = () => {
+  return (
     <div className="min-h-screen bg-gradient-to-br from-white to-gray-50 flex items-center justify-center p-4 relative overflow-hidden">
       {/* Demi-cercle supérieur droit */}
       <div className="absolute top-0 right-0 w-96 h-96 bg-gradient-to-br from-emerald-600 to-emerald-400 rounded-full transform translate-x-1/2 -translate-y-1/2 opacity-20"></div>
@@ -119,84 +211,9 @@ const LoginPage = () => {
             <p className="text-center text-gray-600">Connectez-vous à votre espace personnel</p>
           </div>
 
-          {sessionExpired && (
-            <div className="mb-4 p-3 bg-amber-100 text-amber-700 rounded-lg text-center">
-              Votre session a expiré. Veuillez vous reconnecter.
-            </div>
-          )}
-
-          {loginError && !sessionExpired && (
-            <div className="mb-4 p-3 bg-red-100 text-red-700 rounded-lg text-center">
-              {loginError}
-            </div>
-          )}
-
-          <form onSubmit={formik.handleSubmit} className="space-y-6">
-            <div className="space-y-4">
-              {/* Email field */}
-              <div>
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 flex items-center pl-3">
-                    <FaEnvelope className="h-5 w-5 text-emerald-500" />
-                  </div>
-                  <input
-                    id="email"
-                    name="email"
-                    type="email"
-                    placeholder="Email ou nom d'utilisateur"
-                    className="w-full pl-10 pr-4 py-3 rounded-lg border border-gray-200 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 transition-all duration-200 bg-gray-50"
-                    {...formik.getFieldProps('email')}
-                  />
-                </div>
-                {formik.touched.email && formik.errors.email && (
-                  <div className="text-red-500 text-sm mt-1 ml-2">{formik.errors.email}</div>
-                )}
-              </div>
-
-              {/* Password field */}
-              <div>
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 flex items-center pl-3">
-                    <FaLock className="h-5 w-5 text-emerald-500" />
-                  </div>
-                  <input
-                    id="password"
-                    name="password"
-                    type={showPassword ? 'text' : 'password'}
-                    placeholder="Mot de passe"
-                    className="w-full pl-10 pr-12 py-3 rounded-lg border border-gray-200 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 transition-all duration-200 bg-gray-50"
-                    {...formik.getFieldProps('password')}
-                  />
-                  <button
-                    type="button"
-                    className="absolute inset-y-0 right-0 flex items-center pr-3 text-gray-400 hover:text-gray-600"
-                    onClick={() => setShowPassword(!showPassword)}
-                  >
-                    {showPassword ? <FaEyeSlash className="h-5 w-5" /> : <FaEye className="h-5 w-5" />}
-                  </button>
-                </div>
-                {formik.touched.password && formik.errors.password && (
-                  <div className="text-red-500 text-sm mt-1 ml-2">{formik.errors.password}</div>
-                )}
-              </div>
-            </div>
-
-            <div className="flex items-center justify-between mt-6">
-              <Link
-                href="/Forget-password"
-                className="text-sm text-emerald-600 hover:text-emerald-700 font-medium"
-              >
-                Mot de passe oublié ?
-              </Link>
-            </div>
-
-            <button
-              type="submit"
-              className="w-full py-3 px-4 bg-gradient-to-r from-emerald-600 to-emerald-500 text-white font-medium rounded-lg hover:from-emerald-700 hover:to-emerald-600 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 transform transition-all duration-200 hover:scale-[1.02] shadow-lg"
-            >
-              Se connecter
-            </button>
-          </form>
+          <Suspense fallback={<LoginLoading />}>
+            <LoginForm />
+          </Suspense>
         </div>
 
         {/* Section droite - Décoration */}
