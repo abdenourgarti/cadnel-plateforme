@@ -1,9 +1,9 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import axios from 'axios';
 import { ToastContainer, toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
-import { Dialog } from '@headlessui/react';
 import { useFormik } from 'formik';
 import * as Yup from 'yup';
 import { PencilIcon, XMarkIcon } from '@heroicons/react/24/outline';
@@ -12,83 +12,211 @@ import { Switch } from '@headlessui/react';
 
 // Options pour la fréquence d'envoi d'emails
 const frequenceOptions = [
-  { id: 1, value: "Journalier", label: "Journalier" },
-  { id: 2, value: "Hebdomadaire", label: "Hebdomadaire" },
-  { id: 3, value: "Mensuel", label: "Mensuel" },
+  { id: 1, value: "journalier", label: "Journalier" },
+  { id: 2, value: "hebdo", label: "Hebdomadaire" },
+  { id: 3, value: "mensuel", label: "Mensuel" },
 ];
 
 // Types de rapports disponibles
 const typesRapports = [
-  { id: 1, nom: "Rapport d'absence" },
-  { id: 2, nom: "Rapport de retard" },
-  { id: 3, nom: "Rapport de congé" },
-  { id: 4, nom: "Rapport des employés" },
-  { id: 5, nom: "État de ponctualité" },
+  { id: 1, nom: "Rapport d'absence", key: "absc" },
+  { id: 2, nom: "Rapport de retard", key: "retard" },
+  { id: 3, nom: "Rapport de congé", key: "conge" },
+  { id: 4, nom: "Rapport des employés", key: "pointretardabsc" },
+  { id: 5, nom: "État de ponctualité", key: "etatponct" },
 ];
-
-// Paramètres par défaut
-const parametresDefaut = {
-  frequenceEmail: "Mensuel",
-  rapports: typesRapports.map(rapport => ({
-    id: rapport.id,
-    nom: rapport.nom,
-    actif: true
-  }))
-};
 
 // Schéma de validation
 const parametresSchema = Yup.object().shape({
-  frequenceEmail: Yup.string()
-    .required('La fréquence d\'envoi est requise'),
-  rapports: Yup.array().of(
-    Yup.object().shape({
-      id: Yup.number().required(),
-      nom: Yup.string().required(),
-      actif: Yup.boolean().required()
-    })
-  )
+  type: Yup.string()
+    .required('Le type est requis'),
+  absc: Yup.boolean()
+    .required('Le champ absc est requis'),
+  retard: Yup.boolean()
+    .required('Le champ retard est requis'),
+  conge: Yup.boolean()
+    .required('Le champ conge est requis'),
+  pointretardabsc: Yup.boolean()
+    .required('Le champ pointretardabsc est requis'),
+  etatponct: Yup.boolean()
+    .required('Le champ etatponct est requis'),
 });
 
-export default function Settings() {
-  const [parametres, setParametres] = useState(parametresDefaut);
-  const [isEditing, setIsEditing] = useState(false);
-  const [isModalOpen, setIsModalOpen] = useState(false);
+const getAuthToken = () => {
+  if (typeof window !== 'undefined') {
+    const user = JSON.parse(localStorage.getItem('user'));
+    return user?.token;
+  }
+  return null;
+};
 
-  // Initialisation du formulaire
-  const formik = useFormik({
-    initialValues: parametres,
-    validationSchema: parametresSchema,
-    onSubmit: (values) => {
-      // Mise à jour des paramètres
-      setParametres(values);
-      
-      // Affichage d'une notification
-      toast.success('Paramètres mis à jour avec succès', {
+const getCurrentUser = () => {
+  if (typeof window !== 'undefined') {
+    const user = JSON.parse(localStorage.getItem('user'));
+    return user;
+  }
+  return { role: '', id: '' }; // Valeur par défaut
+};
+
+export default function Settings() {
+  const [parametres, setParametres] = useState(null);
+  const [entreprises, setEntreprises] = useState([]);
+  const [utilisateurs, setUtilisateurs] = useState([]);
+  const [selectedEntrepriseId, setSelectedEntrepriseId] = useState('');
+  const [selectedUserId, setSelectedUserId] = useState('');
+  const [isEditing, setIsEditing] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [currentUser, setCurrentUser] = useState({ role: '', id: '' });
+
+  // Récupérer l'utilisateur actuel seulement côté client
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const user = getCurrentUser();
+      setCurrentUser(user);
+    }
+  }, []);
+
+  const isAdmin = currentUser?.role === 'admin';
+
+  // Récupérer les entreprises (uniquement pour les admins)
+  useEffect(() => {
+    if (isAdmin) {
+      const fetchEntreprises = async () => {
+        try {
+          const response = await axios.get('http://localhost:5000/api/company', {
+            headers: { Authorization: `Bearer ${getAuthToken()}` }
+          });
+          setEntreprises(response.data.data);
+        } catch (error) {
+          console.error('Erreur lors de la récupération des entreprises:', error);
+          toast.error('Erreur lors de la récupération des entreprises', {
+            position: "top-right",
+            autoClose: 5000
+          });
+        }
+      };
+
+      fetchEntreprises();
+    }
+  }, [isAdmin]);
+
+  // Récupérer les utilisateurs d'une entreprise (uniquement pour les admins)
+  useEffect(() => {
+    if (isAdmin && selectedEntrepriseId) {
+      const fetchUtilisateurs = async () => {
+        try {
+          const response = await axios.get(`http://localhost:5000/api/user/${selectedEntrepriseId}`, {
+            headers: { Authorization: `Bearer ${getAuthToken()}` }
+          });
+          setUtilisateurs(response.data.data);
+        } catch (error) {
+          console.error('Erreur lors de la récupération des utilisateurs:', error);
+          toast.error('Erreur lors de la récupération des utilisateurs', {
+            position: "top-right",
+            autoClose: 5000
+          });
+        }
+      };
+
+      fetchUtilisateurs();
+    } else {
+      setUtilisateurs([]);
+    }
+  }, [selectedEntrepriseId, isAdmin]);
+
+  // Récupérer les paramètres de l'utilisateur sélectionné
+  const fetchParametres = async () => {
+    try {
+      setLoading(true);
+      const userId = isAdmin ? selectedUserId : currentUser.id;
+      if (userId) {
+        const response = await axios.get(`http://localhost:5000/api/parametre/user/${userId}`, {
+          headers: { Authorization: `Bearer ${getAuthToken()}` }
+        });
+        setParametres(response.data.data[0]); // Prendre le premier élément du tableau
+      }
+    } catch (error) {
+      console.error('Erreur lors de la récupération des paramètres:', error);
+      toast.error('Erreur lors de la récupération des paramètres', {
         position: "top-right",
         autoClose: 5000
       });
-      
-      // Fermeture du mode édition
-      setIsEditing(false);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchParametres();
+  }, [selectedUserId, isAdmin, currentUser.id]);
+
+  // Formulaire pour modifier les paramètres
+  const formik = useFormik({
+    initialValues: {
+      type: '',
+      absc: false,
+      retard: false,
+      conge: false,
+      pointretardabsc: false,
+      etatponct: false
+    },
+    validationSchema: parametresSchema,
+    onSubmit: async (values) => {
+      try {
+        const userId = isAdmin ? selectedUserId : currentUser.id;
+        const payload = {
+          id_user: userId,
+          type: values.type,
+          absc: values.absc ? 1 : 0,
+          retard: values.retard ? 1 : 0,
+          conge: values.conge ? 1 : 0,
+          pointretardabsc: values.pointretardabsc ? 1 : 0,
+          etatponct: values.etatponct ? 1 : 0
+        };
+        await axios.put(`http://localhost:5000/api/parametre/${parametres.id_parametre}`, payload, {
+          headers: { Authorization: `Bearer ${getAuthToken()}` }
+        });
+        toast.success('Paramètres mis à jour avec succès', {
+          position: "top-right",
+          autoClose: 5000
+        });
+        setIsEditing(false);
+        // Rafraîchir les paramètres après modification
+        fetchParametres();
+      } catch (error) {
+        console.error('Erreur lors de la mise à jour des paramètres:', error);
+        toast.error(`Erreur: ${error.response?.data?.message || 'Une erreur est survenue'}`, {
+          position: "top-right",
+          autoClose: 5000
+        });
+      }
     },
   });
 
+  // Ouvrir le mode édition
   const handleEdit = () => {
-    setIsEditing(true);
+    if (parametres) {
+      formik.setValues({
+        type: parametres.type,
+        absc: parametres.absc,
+        retard: parametres.retard,
+        conge: parametres.conge,
+        pointretardabsc: parametres.pointretardabsc,
+        etatponct: parametres.etatponct
+      });
+      setIsEditing(true);
+    }
   };
 
+  // Annuler l'édition
   const handleCancel = () => {
-    formik.resetForm({ values: parametres });
+    formik.resetForm();
     setIsEditing(false);
   };
 
-  const handleRapportChange = (index, checked) => {
-    const updatedRapports = [...formik.values.rapports];
-    updatedRapports[index] = {
-      ...updatedRapports[index],
-      actif: checked
-    };
-    formik.setFieldValue('rapports', updatedRapports);
+  // Gérer le changement d'état des rapports
+  const handleRapportChange = (key, value) => {
+    formik.setFieldValue(key, value);
   };
 
   return (
@@ -99,7 +227,7 @@ export default function Settings() {
         {/* En-tête */}
         <div className="flex justify-between items-center mb-6">
           <h1 className="text-2xl font-bold text-gray-800">Paramètres</h1>
-          {!isEditing ? (
+          {parametres && !isEditing && (
             <button
               onClick={handleEdit}
               className="flex items-center px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
@@ -107,7 +235,8 @@ export default function Settings() {
               <PencilIcon className="w-5 h-5 mr-2" />
               Modifier
             </button>
-          ) : (
+          )}
+          {isEditing && (
             <div className="flex space-x-2">
               <button
                 onClick={handleCancel}
@@ -126,94 +255,129 @@ export default function Settings() {
           )}
         </div>
 
-        {/* Contenu principal */}
-        <div className="bg-white rounded-lg shadow p-6">
-          <form onSubmit={formik.handleSubmit}>
-            {/* Section Envoi d'emails */}
-            <div className="mb-8">
-              <h2 className="text-lg font-semibold text-gray-800 mb-4">Fréquence d'envoi d'emails</h2>
-              <div className="max-w-md">
-                <label
-                  htmlFor="frequenceEmail"
-                  className="block text-sm font-medium text-gray-700 mb-1"
-                >
-                  Envoyer les rapports
+        {/* Filtres pour les admins */}
+        {isAdmin && (
+          <div className="mb-6 bg-white p-4 rounded-lg shadow">
+            <h2 className="text-lg font-medium mb-4">Filtres</h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Sélection d'entreprise */}
+              <div>
+                <label htmlFor="entrepriseId" className="block text-sm font-medium text-gray-700 mb-1">
+                  Entreprise
                 </label>
                 <select
-                  id="frequenceEmail"
-                  {...formik.getFieldProps('frequenceEmail')}
-                  disabled={!isEditing}
-                  className={`block w-full pl-3 pr-10 py-2 text-base border rounded-md focus:outline-none focus:ring-emerald-500 focus:border-emerald-500 ${
-                    formik.touched.frequenceEmail && formik.errors.frequenceEmail
-                      ? 'border-red-300'
-                      : 'border-gray-300'
-                  } ${!isEditing ? 'bg-gray-50' : ''}`}
+                  id="entrepriseId"
+                  value={selectedEntrepriseId}
+                  onChange={(e) => setSelectedEntrepriseId(e.target.value)}
+                  className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-emerald-500 focus:border-emerald-500"
                 >
-                  {frequenceOptions.map((option) => (
-                    <option key={option.id} value={option.value}>
-                      {option.label}
+                  <option value="">Sélectionnez une entreprise</option>
+                  {entreprises.map((entreprise) => (
+                    <option key={entreprise.id_company} value={entreprise.id_company}>
+                      {entreprise.nom}
                     </option>
                   ))}
                 </select>
-                {formik.touched.frequenceEmail && formik.errors.frequenceEmail && (
-                  <div className="mt-1 text-sm text-red-600">
-                    {formik.errors.frequenceEmail}
-                  </div>
-                )}
               </div>
-            </div>
 
-            {/* Section Rapports */}
-            <div>
-              <h2 className="text-lg font-semibold text-gray-800 mb-4">Rapports à envoyer</h2>
-              
-              <div className="space-y-4">
-                {formik.values.rapports.map((rapport, index) => (
-                  <div key={rapport.id} className="flex items-center justify-between py-3 px-4 bg-gray-50 rounded-lg">
-                    <span className="font-medium text-gray-700">{rapport.nom}</span>
-                    <Switch
-                      checked={rapport.actif}
-                      onChange={(checked) => handleRapportChange(index, checked)}
-                      disabled={!isEditing}
-                      className={`${
-                        rapport.actif ? 'bg-emerald-600' : 'bg-gray-200'
-                      } relative inline-flex h-6 w-11 items-center rounded-full ${
-                        !isEditing ? 'opacity-80' : ''
-                      }`}
-                    >
-                      <span className="sr-only">Activer/désactiver {rapport.nom}</span>
-                      <span
-                        className={`${
-                          rapport.actif ? 'translate-x-6' : 'translate-x-1'
-                        } inline-block h-4 w-4 transform rounded-full bg-white transition`}
-                      />
-                    </Switch>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </form>
-        </div>
-        
-        {/* Informations supplémentaires */}
-        <div className="mt-6 bg-blue-50 border-l-4 border-blue-400 p-4 rounded">
-          <div className="flex">
-            <div className="flex-shrink-0">
-              <svg className="h-5 w-5 text-blue-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
-                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2h-1V9z" clipRule="evenodd" />
-              </svg>
-            </div>
-            <div className="ml-3">
-              <h3 className="text-sm font-medium text-blue-800">Informations sur les rapports</h3>
-              <div className="mt-2 text-sm text-blue-700">
-                <p>
-                  Les rapports seront envoyés automatiquement selon la fréquence définie.
-                  Seuls les rapports activés seront inclus dans l'envoi.
-                </p>
+              {/* Sélection d'utilisateur */}
+              <div>
+                <label htmlFor="userId" className="block text-sm font-medium text-gray-700 mb-1">
+                  Utilisateur
+                </label>
+                <select
+                  id="userId"
+                  value={selectedUserId}
+                  onChange={(e) => setSelectedUserId(e.target.value)}
+                  disabled={!selectedEntrepriseId}
+                  className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-emerald-500 focus:border-emerald-500"
+                >
+                  <option value="">Sélectionnez un utilisateur</option>
+                  {utilisateurs.map((utilisateur) => (
+                    <option key={utilisateur.id_user} value={utilisateur.id_user}>
+                      {utilisateur.nomcomplet}
+                    </option>
+                  ))}
+                </select>
               </div>
             </div>
           </div>
-        </div>
+        )}
+
+        {/* Contenu principal */}
+        {loading ? (
+          <div className="text-center">Chargement...</div>
+        ) : parametres ? (
+          <div className="bg-white rounded-lg shadow p-6">
+            <form onSubmit={formik.handleSubmit}>
+              {/* Fréquence d'envoi d'emails */}
+              <div className="mb-8">
+                <h2 className="text-lg font-semibold text-gray-800 mb-4">Fréquence d'envoi d'emails</h2>
+                <div className="max-w-md">
+                  <label
+                    htmlFor="type"
+                    className="block text-sm font-medium text-gray-700 mb-1"
+                  >
+                    Envoyer les rapports
+                  </label>
+                  <select
+                    id="type"
+                    value={isEditing ? formik.values.type : parametres.type}
+                    onChange={formik.handleChange}
+                    disabled={!isEditing}
+                    className={`block w-full pl-3 pr-10 py-2 text-base border rounded-md focus:outline-none focus:ring-emerald-500 focus:border-emerald-500 ${
+                      formik.touched.type && formik.errors.type
+                        ? 'border-red-300'
+                        : 'border-gray-300'
+                    } ${!isEditing ? 'bg-gray-50' : ''}`}
+                  >
+                    {frequenceOptions.map((option) => (
+                      <option key={option.id} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                  {formik.touched.type && formik.errors.type && (
+                    <div className="mt-1 text-sm text-red-600">
+                      {formik.errors.type}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Rapports à envoyer */}
+              <div>
+                <h2 className="text-lg font-semibold text-gray-800 mb-4">Rapports à envoyer</h2>
+                <div className="space-y-4">
+                  {typesRapports.map((rapport) => (
+                    <div key={rapport.id} className="flex items-center justify-between py-3 px-4 bg-gray-50 rounded-lg">
+                      <span className="font-medium text-gray-700">{rapport.nom}</span>
+                      <Switch
+                        checked={isEditing ? formik.values[rapport.key] : parametres[rapport.key]}
+                        onChange={(checked) => handleRapportChange(rapport.key, checked)}
+                        disabled={!isEditing}
+                        className={`${
+                          (isEditing ? formik.values[rapport.key] : parametres[rapport.key]) ? 'bg-emerald-600' : 'bg-gray-200'
+                        } relative inline-flex h-6 w-11 items-center rounded-full ${
+                          !isEditing ? 'opacity-80' : ''
+                        }`}
+                      >
+                        <span className="sr-only">Activer/désactiver {rapport.nom}</span>
+                        <span
+                          className={`${
+                            (isEditing ? formik.values[rapport.key] : parametres[rapport.key]) ? 'translate-x-6' : 'translate-x-1'
+                          } inline-block h-4 w-4 transform rounded-full bg-white transition`}
+                        />
+                      </Switch>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </form>
+          </div>
+        ) : (
+          <div className="text-center">Aucun paramètre trouvé.</div>
+        )}
       </div>
     </MainLayout>
   );

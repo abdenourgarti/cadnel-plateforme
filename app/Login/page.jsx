@@ -7,34 +7,14 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/app/context/AuthContext';
-
-// Données utilisateurs prédéfinies
-const users = [
-  {
-    id: "1",
-    email: "userone@gmail.com",
-    password: "password",
-    name: "User One",
-    role: "user",
-    companyId: "A123",
-    companyName: "Entreprise A"
-  },
-  {
-    id: "2",
-    email: "usertwo@gmail.com",
-    password: "password",
-    name: "User Two",
-    role: "admin",
-    companyId: null,
-    companyName: null
-  }
-];
+import axios from 'axios';
 
 // Composant avec useSearchParams
 function LoginForm() {
   const [showPassword, setShowPassword] = useState(false);
   const [loginError, setLoginError] = useState('');
   const [sessionExpired, setSessionExpired] = useState(false);
+  const [loading, setLoading] = useState(false);
   const router = useRouter();
   const searchParams = useSearchParams();
   const { login, user } = useAuth();
@@ -70,27 +50,50 @@ function LoginForm() {
       password: ''
     },
     validationSchema,
-    onSubmit: (values) => {
+    onSubmit: async (values) => {
       // Réinitialiser les messages d'erreur
       setLoginError('');
       setSessionExpired(false);
+      setLoading(true);
       
-      // Vérifier les identifiants
-      const foundUser = users.find(user => user.email === values.email && user.password === values.password);
-      
-      if (foundUser) {
-        // Utiliser la fonction login du contexte
-        login({
-          id: foundUser.id,
-          name: foundUser.name,
-          email: foundUser.email,
-          role: foundUser.role,
-          companyId: foundUser.companyId,
-          companyName: foundUser.companyName
+      try {
+        // Appel API avec axios
+        const response = await axios.post('http://localhost:5000/api/auth', {
+          email: values.email,
+          password: values.password
         });
-      } else {
-        // Afficher un message d'erreur
-        setLoginError('Email ou mot de passe incorrect');
+        
+        // Si la requête réussit, on récupère les données utilisateur et le token
+        const userData = response.data;
+        console.log('user', userData)
+        
+        // Utiliser la fonction login du contexte avec le token
+        login({
+          id: userData.data.data.id_user,
+          name: userData.data.data.nomcomplet,
+          email: userData.data.data.email,
+          role: userData.data.data.role,
+          companyId: userData.data.data.id_company,
+          companyName: userData.data.data.nomcompany,
+          token: userData.data.accessToken
+        });
+        
+      } catch (error) {
+        console.error('Erreur de connexion:', error);
+        
+        // Afficher le message d'erreur approprié
+        if (error.response) {
+          // L'API a répondu avec un statut d'erreur
+          setLoginError(error.response.data.message || 'Email ou mot de passe incorrect');
+        } else if (error.request) {
+          // La requête a été faite mais pas de réponse
+          setLoginError('Impossible de joindre le serveur. Veuillez réessayer plus tard.');
+        } else {
+          // Erreur pendant la préparation de la requête
+          setLoginError('Une erreur s\'est produite. Veuillez réessayer.');
+        }
+      } finally {
+        setLoading(false);
       }
     }
   });
@@ -170,9 +173,12 @@ function LoginForm() {
 
         <button
           type="submit"
-          className="w-full py-3 px-4 bg-gradient-to-r from-emerald-600 to-emerald-500 text-white font-medium rounded-lg hover:from-emerald-700 hover:to-emerald-600 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 transform transition-all duration-200 hover:scale-[1.02] shadow-lg"
+          disabled={loading}
+          className={`w-full py-3 px-4 bg-gradient-to-r from-emerald-600 to-emerald-500 text-white font-medium rounded-lg ${
+            loading ? 'opacity-70 cursor-not-allowed' : 'hover:from-emerald-700 hover:to-emerald-600 hover:scale-[1.02]'
+          } focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 transform transition-all duration-200 shadow-lg`}
         >
-          Se connecter
+          {loading ? 'Connexion en cours...' : 'Se connecter'}
         </button>
       </form>
     </>

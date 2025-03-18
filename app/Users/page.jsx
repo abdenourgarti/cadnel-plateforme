@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import axios from 'axios';
 import { ToastContainer, toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import { Dialog } from '@headlessui/react';
@@ -8,146 +9,177 @@ import { useFormik } from 'formik';
 import * as Yup from 'yup';
 import Swal from 'sweetalert2';
 import { PlusIcon, PencilIcon, TrashIcon, XMarkIcon } from '@heroicons/react/24/outline';
-import { FaEye, FaEyeSlash } from 'react-icons/fa';
+import { FaToggleOn, FaToggleOff, FaEyeSlash, FaEye } from 'react-icons/fa';
 import MainLayout from '@/components/layouts/MainLayout';
-
-// Données de démonstration pour les entreprises
-const entreprises = [
-  { id: 1, nom: "Entreprise A" },
-  { id: 2, nom: "Entreprise B" },
-  { id: 3, nom: "Entreprise C" },
-  { id: 4, nom: "Entreprise D" },
-];
-
-// Données de démonstration pour les utilisateurs
-const initialUsers = [
-  { id: 1, entrepriseId: 1, username: "user1", email: "user1@entreprisea.com", password: "password123" },
-  { id: 2, entrepriseId: 1, username: "user2", email: "user2@entreprisea.com", password: "password123" },
-  { id: 3, entrepriseId: 2, username: "user3", email: "user3@entrepriseb.com", password: "password123" },
-  { id: 4, entrepriseId: 3, username: "user4", email: "user4@entreprisec.com", password: "password123" },
-  { id: 5, entrepriseId: 4, username: "user5", email: "user5@entreprised.com", password: "password123" },
-];
 
 // Schéma de validation pour l'ajout d'utilisateur
 const addUserSchema = Yup.object().shape({
-  entrepriseId: Yup.number()
-    .required('L\'entreprise est requise'),
-  username: Yup.string()
-    .min(3, 'Le nom d\'utilisateur doit contenir au moins 3 caractères')
-    .max(50, 'Le nom d\'utilisateur ne doit pas dépasser 50 caractères')
-    .required('Le nom d\'utilisateur est requis'),
   email: Yup.string()
     .email('Adresse email invalide')
     .required('L\'email est requis'),
   password: Yup.string()
     .min(6, 'Le mot de passe doit contenir au moins 6 caractères')
     .required('Le mot de passe est requis'),
-  confirmPassword: Yup.string()
-    .oneOf([Yup.ref('password'), null], 'Les mots de passe doivent correspondre')
-    .required('La confirmation du mot de passe est requise')
+  nomcomplet: Yup.string()
+    .min(3, 'Le nom complet doit contenir au moins 3 caractères')
+    .required('Le nom complet est requis'),
+  id_company: Yup.number()
+    .required('L\'entreprise est requise'),
 });
 
 // Schéma de validation pour la modification d'utilisateur
 const editUserSchema = Yup.object().shape({
-  entrepriseId: Yup.number()
-    .required('L\'entreprise est requise'),
-  username: Yup.string()
-    .min(3, 'Le nom d\'utilisateur doit contenir au moins 3 caractères')
-    .max(50, 'Le nom d\'utilisateur ne doit pas dépasser 50 caractères')
-    .required('Le nom d\'utilisateur est requis'),
   email: Yup.string()
     .email('Adresse email invalide')
     .required('L\'email est requis'),
   password: Yup.string()
     .min(6, 'Le mot de passe doit contenir au moins 6 caractères')
     .nullable(),
-  confirmPassword: Yup.string()
-    .oneOf([Yup.ref('password'), null], 'Les mots de passe doivent correspondre')
-    .nullable()
-    .when('password', {
-      is: (password) => password && password.length > 0,
-      then: (schema) => schema.required('La confirmation du mot de passe est requise'),
-      otherwise: (schema) => schema
-    })
+  nomcomplet: Yup.string()
+    .min(3, 'Le nom complet doit contenir au moins 3 caractères')
+    .required('Le nom complet est requis'),
+  id_company: Yup.number()
+    .required('L\'entreprise est requise'),
 });
 
+const getAuthToken = () => {
+  const user = JSON.parse(localStorage.getItem('user'));
+  return user.token;
+};
+
 export default function Users() {
-  const [users, setUsers] = useState(initialUsers);
+  const [users, setUsers] = useState([]);
   const [filteredUsers, setFilteredUsers] = useState([]);
+  const [entreprises, setEntreprises] = useState([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState(null);
   const [isEditing, setIsEditing] = useState(false);
   const [selectedEntrepriseId, setSelectedEntrepriseId] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [loading, setLoading] = useState(true);
 
+  // Récupérer les entreprises
   useEffect(() => {
-    if (selectedEntrepriseId) {
-      const filtered = users.filter(user => user.entrepriseId === parseInt(selectedEntrepriseId));
-      setFilteredUsers(filtered);
-    } else {
-      setFilteredUsers([]);
-    }
-  }, [selectedEntrepriseId, users]);
-
-  const formik = useFormik({
-    initialValues: {
-      entrepriseId: '',
-      username: '',
-      email: '',
-      password: '',
-      confirmPassword: ''
-    },
-    validationSchema: isEditing ? editUserSchema : addUserSchema,
-    onSubmit: (values) => {
-      if (isEditing) {
-        // Modification
-        const updatedUsers = users.map(user =>
-          user.id === selectedUser.id
-            ? { 
-                ...user, 
-                entrepriseId: parseInt(values.entrepriseId),
-                username: values.username,
-                email: values.email,
-                ...(values.password ? { password: values.password } : {})
-              }
-            : user
-        );
-        setUsers(updatedUsers);
-        
-        toast.success('Utilisateur modifié avec succès', {
-          position: "top-right",
-          autoClose: 5000
+    const fetchEntreprises = async () => {
+      try {
+        const response = await axios.get('http://localhost:5000/api/company', {
+          headers: { Authorization: `Bearer ${getAuthToken()}` }
         });
-      } else {
-        // Ajout
-        const newUser = {
-          id: users.length + 1,
-          entrepriseId: parseInt(values.entrepriseId),
-          username: values.username,
-          email: values.email,
-          password: values.password
-        };
-        setUsers([...users, newUser]);
-        
-        toast.success('Utilisateur ajouté avec succès', {
+        setEntreprises(response.data.data.map(company => ({
+          id: company.id_company,
+          nom: company.nom
+        })));
+      } catch (error) {
+        console.error('Erreur lors de la récupération des entreprises:', error);
+        toast.error('Erreur lors de la récupération des entreprises', {
           position: "top-right",
           autoClose: 5000
         });
       }
-      
-      handleCloseModal();
+    };
+
+    fetchEntreprises();
+  }, []);
+
+  // Récupérer les utilisateurs
+  const fetchUsers = async (companyId = null) => {
+    try {
+      setLoading(true);
+      const url = companyId ? `http://localhost:5000/api/user/${companyId}` : 'http://localhost:5000/api/user';
+      const response = await axios.get(url, {
+        headers: { Authorization: `Bearer ${getAuthToken()}` }
+      });
+      setUsers(response.data.data);
+      if (companyId) {
+        setFilteredUsers(response.data.data);
+      }
+    } catch (error) {
+      console.error('Erreur lors de la récupération des utilisateurs:', error);
+      toast.error('Erreur lors de la récupération des utilisateurs', {
+        position: "top-right",
+        autoClose: 5000
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchUsers(selectedEntrepriseId || null);
+  }, [selectedEntrepriseId]);
+  
+  const formik = useFormik({
+    initialValues: {
+      email: '',
+      password: '',
+      nomcomplet: '',
+      id_company: ''
+    },
+    validationSchema: isEditing ? editUserSchema : addUserSchema,
+    onSubmit: async (values) => {
+      try {
+        const selectedEntreprise = entreprises.find(e => e.id == values.id_company);
+        console.log('entreprise', selectedEntreprise)
+          if (!selectedEntreprise) {
+            toast.error('Entreprise sélectionnée invalide', {
+              position: "top-right",
+              autoClose: 5000
+            });
+            return; // Arrêter l'exécution si l'entreprise n'est pas trouvée
+          }
+        if (isEditing) {
+          
+          const updatedUser = {
+            email: values.email,
+            nomcomplet: values.nomcomplet,
+            id_company: values.id_company,
+            nomcompany: selectedEntreprise.nom,
+            ...(values.password ? { password: values.password } : {})
+          };
+          
+          await axios.put(`http://localhost:5000/api/user/${selectedUser.id_user}`, updatedUser, {
+            headers: { Authorization: `Bearer ${getAuthToken()}` }
+          });
+          fetchUsers(selectedEntrepriseId);
+          toast.success('Utilisateur modifié avec succès', {
+            position: "top-right",
+            autoClose: 5000
+          });
+        } else {
+          const newUser = {
+            email: values.email,
+            password: values.password,
+            nomcomplet: values.nomcomplet,
+            id_company: values.id_company,
+            nomcompany: selectedEntreprise.nom,
+          };
+          await axios.post('http://localhost:5000/api/user/simple', newUser, {
+            headers: { Authorization: `Bearer ${getAuthToken()}` }
+          });
+          fetchUsers(selectedEntrepriseId);
+          toast.success('Utilisateur ajouté avec succès', {
+            position: "top-right",
+            autoClose: 5000
+          });
+        }
+        handleCloseModal();
+      } catch (error) {
+        console.error('Erreur lors de l\'opération:', error);
+        toast.error(`Erreur: ${error.response?.data?.message || 'Une erreur est survenue'}`, {
+          position: "top-right",
+          autoClose: 5000
+        });
+      }
     },
   });
 
   const handleEdit = (user) => {
     setSelectedUser(user);
     formik.setValues({
-      entrepriseId: user.entrepriseId.toString(),
-      username: user.username,
       email: user.email,
+      nomcomplet: user.nomcomplet,
+      id_company: user.id_company,
       password: '',
-      confirmPassword: ''
     });
     setIsEditing(true);
     setIsModalOpen(true);
@@ -156,23 +188,52 @@ export default function Users() {
   const handleDelete = (user) => {
     Swal.fire({
       title: 'Confirmer la suppression',
-      text: `Voulez-vous vraiment supprimer l'utilisateur "${user.username}" ?`,
+      text: `Voulez-vous vraiment supprimer l'utilisateur "${user.nomcomplet}" ?`,
       icon: 'warning',
       showCancelButton: true,
       confirmButtonColor: '#d33',
       cancelButtonColor: '#3085d6',
       confirmButtonText: 'Supprimer',
       cancelButtonText: 'Annuler'
-    }).then((result) => {
+    }).then(async (result) => {
       if (result.isConfirmed) {
-        const updatedUsers = users.filter(u => u.id !== user.id);
-        setUsers(updatedUsers);
-        toast.success('Utilisateur supprimé avec succès', {
-          position: "top-right",
-          autoClose: 5000
-        });
+        try {
+          await axios.delete(`http://localhost:5000/api/user/${user.id_user}`, {
+            headers: { Authorization: `Bearer ${getAuthToken()}` }
+          });
+          fetchUsers(selectedEntrepriseId);
+          toast.success('Utilisateur supprimé avec succès', {
+            position: "top-right",
+            autoClose: 5000
+          });
+        } catch (error) {
+          console.error('Erreur lors de la suppression:', error);
+          toast.error(`Erreur: ${error.response?.data?.message || 'Une erreur est survenue lors de la suppression'}`, {
+            position: "top-right",
+            autoClose: 5000
+          });
+        }
       }
     });
+  };
+
+  const handleToggleActivation = async (user) => {
+    try {
+      await axios.put(`http://localhost:5000/api/user/enable/${user.id_user}`, { enable: !user.enabled }, {
+        headers: { Authorization: `Bearer ${getAuthToken()}` }
+      });
+      fetchUsers(selectedEntrepriseId);
+      toast.success(`Utilisateur ${user.enabled ? 'désactivé' : 'activé'} avec succès`, {
+        position: "top-right",
+        autoClose: 5000
+      });
+    } catch (error) {
+      console.error('Erreur lors de la modification de l\'état:', error);
+      toast.error(`Erreur: ${error.response?.data?.message || 'Une erreur est survenue'}`, {
+        position: "top-right",
+        autoClose: 5000
+      });
+    }
   };
 
   const handleCloseModal = () => {
@@ -181,7 +242,6 @@ export default function Users() {
     formik.resetForm();
     setSelectedUser(null);
     setShowPassword(false);
-    setShowConfirmPassword(false);
   };
 
   const getEntrepriseName = (id) => {
@@ -236,8 +296,9 @@ export default function Users() {
               <tr>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Entreprise</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nom d'utilisateur</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nom complet</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Email</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Statut</th>
                 <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
               </tr>
             </thead>
@@ -245,12 +306,23 @@ export default function Users() {
               {selectedEntrepriseId ? (
                 filteredUsers.length > 0 ? (
                   filteredUsers.map((user) => (
-                    <tr key={user.id} className="hover:bg-gray-50">
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{user.id}</td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{getEntrepriseName(user.entrepriseId)}</td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{user.username}</td>
+                    <tr key={user.id_user} className="hover:bg-gray-50">
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{user.id_user}</td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{getEntrepriseName(user.id_company)}</td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{user.nomcomplet}</td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{user.email}</td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        <span className={`px-2 py-1 text-xs font-semibold rounded-full ${user.enabled ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                          {user.enabled ? 'Actif' : 'Inactif'}
+                        </span>
+                      </td>
                       <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                        <button
+                          onClick={() => handleToggleActivation(user)}
+                          className="text-indigo-600 hover:text-indigo-900 mr-3"
+                        >
+                          {!user.enabled ? <FaToggleOff className="w-5 h-5" /> : <FaToggleOn className="w-5 h-5" />}
+                        </button>
                         <button
                           onClick={() => handleEdit(user)}
                           className="text-indigo-600 hover:text-indigo-900 mr-3"
@@ -267,15 +339,15 @@ export default function Users() {
                     </tr>
                   ))
                 ) : (
-                  <tr>
-                    <td colSpan="5" className="px-6 py-4 text-center text-sm text-gray-500">
+                  <tr key="no-data">
+                    <td colSpan="6" className="px-6 py-4 text-center text-sm text-gray-500">
                       Aucun utilisateur trouvé pour cette entreprise.
                     </td>
                   </tr>
                 )
               ) : (
-                <tr>
-                  <td colSpan="5" className="px-6 py-4 text-center text-sm text-gray-500">
+                <tr key="choose-data">
+                  <td colSpan="6" className="px-6 py-4 text-center text-sm text-gray-500">
                     Veuillez sélectionner une entreprise pour afficher les utilisateurs.
                   </td>
                 </tr>
@@ -312,16 +384,16 @@ export default function Users() {
                     {/* Entreprise */}
                     <div>
                       <label
-                        htmlFor="entrepriseId"
+                        htmlFor="id_company"
                         className="block text-sm font-medium text-gray-700"
                       >
                         Entreprise
                       </label>
                       <select
-                        id="entrepriseId"
-                        {...formik.getFieldProps('entrepriseId')}
+                        id="id_company"
+                        {...formik.getFieldProps('id_company')}
                         className={`mt-1 block w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-emerald-500 focus:border-emerald-500 ${
-                          formik.touched.entrepriseId && formik.errors.entrepriseId
+                          formik.touched.id_company && formik.errors.id_company
                             ? 'border-red-300'
                             : 'border-gray-300'
                         }`}
@@ -333,35 +405,9 @@ export default function Users() {
                           </option>
                         ))}
                       </select>
-                      {formik.touched.entrepriseId && formik.errors.entrepriseId && (
+                      {formik.touched.id_company && formik.errors.id_company && (
                         <div className="mt-1 text-sm text-red-600">
-                          {formik.errors.entrepriseId}
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Nom d'utilisateur */}
-                    <div>
-                      <label
-                        htmlFor="username"
-                        className="block text-sm font-medium text-gray-700"
-                      >
-                        Nom d'utilisateur
-                      </label>
-                      <input
-                        type="text"
-                        id="username"
-                        {...formik.getFieldProps('username')}
-                        className={`mt-1 block w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-emerald-500 focus:border-emerald-500 ${
-                          formik.touched.username && formik.errors.username
-                            ? 'border-red-300'
-                            : 'border-gray-300'
-                        }`}
-                        placeholder="Saisir le nom d'utilisateur"
-                      />
-                      {formik.touched.username && formik.errors.username && (
-                        <div className="mt-1 text-sm text-red-600">
-                          {formik.errors.username}
+                          {formik.errors.id_company}
                         </div>
                       )}
                     </div>
@@ -371,7 +417,7 @@ export default function Users() {
                       <label
                         htmlFor="email"
                         className="block text-sm font-medium text-gray-700"
-                      >
+                      >F
                         Email
                       </label>
                       <input
@@ -388,6 +434,32 @@ export default function Users() {
                       {formik.touched.email && formik.errors.email && (
                         <div className="mt-1 text-sm text-red-600">
                           {formik.errors.email}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Nom complet */}
+                    <div>
+                      <label
+                        htmlFor="nomcomplet"
+                        className="block text-sm font-medium text-gray-700"
+                      >
+                        Nom complet
+                      </label>
+                      <input
+                        type="text"
+                        id="nomcomplet"
+                        {...formik.getFieldProps('nomcomplet')}
+                        className={`mt-1 block w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-emerald-500 focus:border-emerald-500 ${
+                          formik.touched.nomcomplet && formik.errors.nomcomplet
+                            ? 'border-red-300'
+                            : 'border-gray-300'
+                        }`}
+                        placeholder="Saisir le nom complet"
+                      />
+                      {formik.touched.nomcomplet && formik.errors.nomcomplet && (
+                        <div className="mt-1 text-sm text-red-600">
+                          {formik.errors.nomcomplet}
                         </div>
                       )}
                     </div>
@@ -423,41 +495,6 @@ export default function Users() {
                       {formik.touched.password && formik.errors.password && (
                         <div className="mt-1 text-sm text-red-600">
                           {formik.errors.password}
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Confirmation mot de passe */}
-                    <div>
-                      <label
-                        htmlFor="confirmPassword"
-                        className="block text-sm font-medium text-gray-700"
-                      >
-                        {isEditing ? "Confirmer le nouveau mot de passe" : "Confirmer le mot de passe"}
-                      </label>
-                      <div className="mt-1 relative rounded-md shadow-sm">
-                        <input
-                          type={showConfirmPassword ? "text" : "password"}
-                          id="confirmPassword"
-                          {...formik.getFieldProps('confirmPassword')}
-                          className={`block w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-emerald-500 focus:border-emerald-500 ${
-                            formik.touched.confirmPassword && formik.errors.confirmPassword
-                              ? 'border-red-300'
-                              : 'border-gray-300'
-                          }`}
-                          placeholder={isEditing ? "Laisser vide pour ne pas changer" : "Saisir à nouveau le mot de passe"}
-                        />
-                        <button
-                          type="button"
-                          className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-500 hover:text-gray-700"
-                          onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                        >
-                          {showConfirmPassword ? <FaEyeSlash className="h-5 w-5" /> : <FaEye className="h-5 w-5" />}
-                        </button>
-                      </div>
-                      {formik.touched.confirmPassword && formik.errors.confirmPassword && (
-                        <div className="mt-1 text-sm text-red-600">
-                          {formik.errors.confirmPassword}
                         </div>
                       )}
                     </div>

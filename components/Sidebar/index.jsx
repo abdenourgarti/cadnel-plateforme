@@ -28,7 +28,7 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
       const user = JSON.parse(localStorage.getItem('user'));
       if (user && user.role) {
         setIsAdmin(user.role === 'admin');
-        console.log('User data:', user);
+        
       }
     } catch (error) {
       console.error('Error parsing user data:', error);
@@ -177,7 +177,7 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
       <div
         className={`fixed top-16 left-0 h-[calc(100vh-4rem)] w-64 bg-emerald-600 transition-transform duration-300 ease-in-out transform z-20 ${
           isOpen ? 'translate-x-0' : '-translate-x-full'
-        } md:translate-x-0 md:${isMobile ? '-translate-x-full' : ''} overflow-y-auto`}
+        } overflow-y-auto`}
       >
         <div className="py-4">
           {menuSections.map((section) => (

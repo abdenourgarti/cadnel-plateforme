@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import axios from 'axios';
 import { ToastContainer, toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import { MagnifyingGlassIcon, ArrowPathIcon, ArrowDownTrayIcon } from '@heroicons/react/24/outline';
@@ -8,152 +9,185 @@ import { useFormik } from 'formik';
 import * as Yup from 'yup';
 import MainLayout from '@/components/layouts/MainLayout';
 
-// Données fictives pour les employés
-const employes = [
-  { id: 1, nomPrenom: "Jean Dupont" },
-  { id: 2, nomPrenom: "Marie Martin" },
-  { id: 3, nomPrenom: "Paul Durand" },
-  { id: 4, nomPrenom: "Sophie Leroy" },
-  { id: 5, nomPrenom: "Thomas Bernard" },
-];
+const getAuthToken = () => {
+  if (typeof window !== 'undefined') {
+    const user = JSON.parse(localStorage.getItem('user'));
+    return user?.token;
+  }
+  return null;
+};
 
-// Données fictives pour la démo
-const generateMockData = () => [
-  { 
-    id: 1, 
-    employeId: 1, 
-    employeNom: "Jean Dupont", 
-    presence: 19, 
-    absence: 1, 
-    tauxPresence: 95, 
-    aLHeure: 17, 
-    retard: 2, 
-    tauxPonctualite: 89.5
-  },
-  { 
-    id: 2, 
-    employeId: 2, 
-    employeNom: "Marie Martin", 
-    presence: 20, 
-    absence: 0, 
-    tauxPresence: 100, 
-    aLHeure: 20, 
-    retard: 0, 
-    tauxPonctualite: 100
-  },
-  { 
-    id: 3, 
-    employeId: 3, 
-    employeNom: "Paul Durand", 
-    presence: 15, 
-    absence: 5, 
-    tauxPresence: 75, 
-    aLHeure: 12, 
-    retard: 3, 
-    tauxPonctualite: 80
-  },
-  { 
-    id: 4, 
-    employeId: 4, 
-    employeNom: "Sophie Leroy", 
-    presence: 17, 
-    absence: 3, 
-    tauxPresence: 85, 
-    aLHeure: 15, 
-    retard: 2, 
-    tauxPonctualite: 88.2
-  },
-  { 
-    id: 5, 
-    employeId: 5, 
-    employeNom: "Thomas Bernard", 
-    presence: 7, 
-    absence: 13, 
-    tauxPresence: 35, 
-    aLHeure: 7, 
-    retard: 0, 
-    tauxPonctualite: 100
-  },
-];
+const getCurrentUser = () => {
+  if (typeof window !== 'undefined') {
+    const user = JSON.parse(localStorage.getItem('user'));
+    return user;
+  }
+  return { role: '', companyId: '' }; // Valeur par défaut
+};
 
-// Schéma de validation pour le formulaire de recherche
 const rechercheSchema = Yup.object().shape({
-  employeId: Yup.number().nullable(),
-  dateDebut: Yup.date()
-    .required('La date de début est requise'),
+  entrepriseId: Yup.number().nullable(),
+  departementId: Yup.number().nullable(),
+  dateDebut: Yup.date().required('La date de début est requise'),
   dateFin: Yup.date()
     .required('La date de fin est requise')
-    .min(
-      Yup.ref('dateDebut'),
-      'La date de fin doit être postérieure à la date de début'
-    )
+    .min(Yup.ref('dateDebut'), 'La date de fin doit être postérieure à la date de début')
 });
 
 export default function EtatPonctualite() {
   const [statsData, setStatsData] = useState([]);
+  const [entreprises, setEntreprises] = useState([]);
+  const [departements, setDepartements] = useState([]);
   const [hasSearched, setHasSearched] = useState(false);
-  const [periodeLabel, setPeriodeLabel] = useState("");
+  const [currentUser, setCurrentUser] = useState({ role: '', companyId: '' });
 
-  // Formulaire pour la recherche
+  const isAdmin = currentUser?.role === 'admin';
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const user = getCurrentUser();
+      setCurrentUser(user);
+    }
+  }, []);
+
+// D'abord, récupérer les informations de l'utilisateur
+useEffect(() => {
+  if (typeof window !== 'undefined') {
+    const user = getCurrentUser();
+    setCurrentUser(user);
+  }
+}, []);
+
+// Ensuite, charger les données appropriées en fonction du rôle de l'utilisateur
+useEffect(() => {
+  // S'assurer que currentUser est chargé
+  if (!currentUser.role) return;
+  
+  if (isAdmin) {
+    const fetchEntreprises = async () => {
+      try {
+        const response = await axios.get('http://localhost:5000/api/company', {
+          headers: { Authorization: `Bearer ${getAuthToken()}` }
+        });
+        setEntreprises(response.data.data);
+      } catch (error) {
+        console.error('Erreur lors de la récupération des entreprises:', error);
+        toast.error('Erreur lors de la récupération des entreprises', {
+          position: "top-right",
+          autoClose: 5000
+        });
+      }
+    };
+
+    fetchEntreprises();
+  } else if (currentUser.companyId) {
+    // Seulement appeler fetchDepartements si companyId existe
+    fetchDepartements(currentUser.companyId);
+  }
+}, [currentUser, isAdmin]);
+  const fetchDepartements = async (companyId) => {
+    try {
+      const response = await axios.get(`http://localhost:5000/api/departement/${companyId}`, {
+        headers: { Authorization: `Bearer ${getAuthToken()}` }
+      });
+      setDepartements(response.data.data);
+    } catch (error) {
+      console.error('Erreur lors de la récupération des départements:', error);
+      toast.error('Erreur lors de la récupération des départements', {
+        position: "top-right",
+        autoClose: 5000
+      });
+    }
+  };
+
   const rechercheFormik = useFormik({
     initialValues: {
-      employeId: '',
+      entrepriseId: '',
+      departementId: '',
       dateDebut: '',
       dateFin: ''
     },
     validationSchema: rechercheSchema,
-    onSubmit: (values) => {
-      // Simulation de récupération des données
-      let data = generateMockData();
-      
-      // Appliquer le filtre par employé si sélectionné
-      if (values.employeId) {
-        data = data.filter(item => item.employeId === parseInt(values.employeId));
+    onSubmit: async (values) => {
+      try {
+        const id_departement = values.departementId;
+        const payload = {
+          datedebut: values.dateDebut,
+          datefin: values.dateFin
+        };
+
+        const response = await axios({
+          method: 'post',
+          url: `http://localhost:5000/api/rapport/etatponctualite/${id_departement}`,
+          data: payload,  // Ceci sera le corps de la requête
+          headers: { 
+            'Authorization': `Bearer ${getAuthToken()}`,
+            'Content-Type': 'application/json'
+          }
+        });
+
+        setStatsData(response.data.data);
+        setHasSearched(true);
+
+        toast.success('Données récupérées avec succès', {
+          position: "top-right",
+          autoClose: 3000
+        });
+      } catch (error) {
+        console.error('Erreur lors de la récupération des données:', error);
+        toast.error('Erreur lors de la récupération des données', {
+          position: "top-right",
+          autoClose: 5000
+        });
       }
-      
-      setStatsData(data);
-      setHasSearched(true);
-      
-      // Formater les dates pour l'affichage
-      const dateDebut = new Date(values.dateDebut).toLocaleDateString('fr-FR');
-      const dateFin = new Date(values.dateFin).toLocaleDateString('fr-FR');
-      setPeriodeLabel(`${dateDebut} au ${dateFin}`);
-      
-      toast.success('Données récupérées avec succès', {
-        position: "top-right",
-        autoClose: 3000
-      });
     }
   });
 
-  // Réinitialiser les filtres
   const resetFilters = () => {
     rechercheFormik.resetForm();
     setStatsData([]);
     setHasSearched(false);
-    setPeriodeLabel("");
-    
+    isAdmin ?? setDepartements([]);
+
     toast.info('Filtres réinitialisés', {
       position: "top-right",
       autoClose: 3000
     });
   };
 
-  // Fonction pour gérer l'exportation en PDF
-  const handleExportPDF = () => {
-    toast.info('Génération du PDF en cours...', {
-      position: "top-right",
-      autoClose: 3000
-    });
-    
-    // Ici, vous implémenteriez l'appel à votre API pour générer le PDF
-    // Pour l'instant, c'est juste une simulation
-    setTimeout(() => {
-      toast.success('PDF généré avec succès', {
+  const handleExport = async () => {
+    try {
+      const id_departement = rechercheFormik.values.departementId;
+      const payload = {
+        datedebut: rechercheFormik.values.dateDebut,
+        datefin: rechercheFormik.values.dateFin
+      };
+
+      const response = await axios.post(`http://localhost:5000/api/rapport/etatponctualite/${id_departement}/export`, payload, {
+        headers: { Authorization: `Bearer ${getAuthToken()}` },
+        responseType: 'blob'
+      });
+
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', 'etat_ponctualite.pdf');
+      document.body.appendChild(link);
+      link.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(link);
+
+      toast.success('Exportation réussie', {
         position: "top-right",
         autoClose: 3000
       });
-    }, 1500);
+    } catch (error) {
+      console.error('Erreur lors de l\'exportation:', error);
+      toast.error('Erreur lors de l\'exportation', {
+        position: "top-right",
+        autoClose: 5000
+      });
+    }
   };
 
   return (
@@ -164,12 +198,12 @@ export default function EtatPonctualite() {
         {/* En-tête */}
         <div className="mb-6 flex justify-between items-center">
           <h1 className="text-2xl font-bold text-gray-800">
-            État de Ponctualité {periodeLabel ? `- Période: ${periodeLabel}` : ""}
+            État de Ponctualité
           </h1>
           
-          {hasSearched && (
+          {hasSearched && statsData.length > 0 && (
             <button
-              onClick={handleExportPDF}
+              onClick={handleExport}
               className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
             >
               <ArrowDownTrayIcon className="w-5 h-5 mr-2" />
@@ -183,21 +217,51 @@ export default function EtatPonctualite() {
           <h2 className="text-lg font-medium mb-4">Recherche par période</h2>
           
           <form onSubmit={rechercheFormik.handleSubmit}>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {/* Sélection d'employé */}
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              {/* Sélection d'entreprise (uniquement pour les admins) */}
+              {isAdmin && (
+                <div>
+                  <label htmlFor="entrepriseId" className="block text-sm font-medium text-gray-700 mb-1">
+                    Entreprise
+                  </label>
+                  <select
+                    id="entrepriseId"
+                    {...rechercheFormik.getFieldProps('entrepriseId')}
+                    onChange={(e) => {
+                      rechercheFormik.setFieldValue('entrepriseId', e.target.value);
+                      if (e.target.value) {
+                        fetchDepartements(e.target.value);
+                      } else {
+                        setDepartements([]);
+                      }
+                    }}
+                    className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-emerald-500 focus:border-emerald-500"
+                  >
+                    <option value="">Sélectionnez une entreprise</option>
+                    {entreprises.map((entreprise) => (
+                      <option key={entreprise.id_company} value={entreprise.id_company}>
+                        {entreprise.nom}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {/* Sélection de département */}
               <div>
-                <label htmlFor="employeId" className="block text-sm font-medium text-gray-700 mb-1">
-                  Employé
+                <label htmlFor="departementId" className="block text-sm font-medium text-gray-700 mb-1">
+                  Département
                 </label>
                 <select
-                  id="employeId"
-                  {...rechercheFormik.getFieldProps('employeId')}
+                  id="departementId"
+                  {...rechercheFormik.getFieldProps('departementId')}
+                  disabled={!rechercheFormik.values.entrepriseId && isAdmin}
                   className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-emerald-500 focus:border-emerald-500"
                 >
-                  <option value="">Tous les employés</option>
-                  {employes.map((employe) => (
-                    <option key={employe.id} value={employe.id}>
-                      {employe.nomPrenom}
+                  <option value="">Tous les départements</option>
+                  {departements.map((departement) => (
+                    <option key={departement.id_departement} value={departement.id_departement}>
+                      {departement.nom}
                     </option>
                   ))}
                 </select>
@@ -303,38 +367,38 @@ export default function EtatPonctualite() {
                   </th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-200">
+              <tbody key="stats-tbody" className="divide-y divide-gray-200">
                 {statsData.length > 0 ? (
                   statsData.map((stat, index) => (
-                    <tr key={stat.id} className={index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+                    <tr key={stat.id || `stat-${index}`} className={index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 text-center">
-                        {index + 1}
+                        {stat.numero}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                        {stat.employeNom}
+                        {stat.nomPrenom}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 text-center">
-                        {stat.presence}/20
+                        {stat.presenceAuPoste.presence}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 text-center">
-                        {stat.absence}
+                        {stat.presenceAuPoste.absence}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 text-center">
-                        {stat.tauxPresence}%
+                        {stat.presenceAuPoste.tauxPresence}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 text-center">
-                        {stat.aLHeure}
+                        {stat.ponctualite.aLHeure}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 text-center">
-                        {stat.retard}
+                        {stat.ponctualite.retard}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 text-center">
-                        {stat.tauxPonctualite}%
+                        {stat.ponctualite.tauxPonctualite}
                       </td>
                     </tr>
                   ))
                 ) : (
-                  <tr>
+                  <tr key="no-data">
                     <td colSpan="8" className="px-6 py-4 whitespace-nowrap text-sm text-center text-gray-500">
                       Aucune donnée trouvée pour cette période
                     </td>

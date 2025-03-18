@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import axios from 'axios';
 import { ToastContainer, toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import { Dialog } from '@headlessui/react';
@@ -10,71 +11,198 @@ import Swal from 'sweetalert2';
 import { PlusIcon, PencilIcon, TrashIcon, XMarkIcon } from '@heroicons/react/24/outline';
 import MainLayout from '@/components/layouts/MainLayout';
 
-// Données de démonstration
-const initialPostes = [
-  { id: 1, code: "POS001", name: "Développeur Frontend", employeesCount: 5 },
-  { id: 2, code: "POS002", name: "Développeur Backend", employeesCount: 8 },
-  { id: 3, code: "POS003", name: "Chef de Projet", employeesCount: 3 },
-  { id: 4, code: "POS004", name: "Comptable", employeesCount: 2 },
-  { id: 5, code: "POS005", name: "Responsable RH", employeesCount: 1 },
-];
-
-// Schéma de validation
-const posteSchema = Yup.object().shape({
-  posteName: Yup.string()
-    .min(2, 'Le nom doit contenir au moins 2 caractères')
-    .max(50, 'Le nom ne doit pas dépasser 50 caractères')
+// Schéma de validation pour l'ajout de poste
+const addPosteSchema = Yup.object().shape({
+  nom: Yup.string()
+    .min(3, 'Le nom doit contenir au moins 3 caractères')
     .required('Le nom du poste est requis'),
+  id_company: Yup.number()
+    .required('L\'entreprise est requise'),
 });
 
+// Schéma de validation pour la modification de poste
+const editPosteSchema = Yup.object().shape({
+  nom: Yup.string()
+    .min(3, 'Le nom doit contenir au moins 3 caractères')
+    .required('Le nom du poste est requis'),
+  id_company: Yup.number()
+    .required('L\'entreprise est requise'),
+});
+
+const getAuthToken = () => {
+  if (typeof window !== 'undefined') {
+    const user = JSON.parse(localStorage.getItem('user') || '{}');
+    return user?.token;
+  }
+  return null;
+};
+
+const getCurrentUser = () => {
+  if (typeof window !== 'undefined') {
+    const userStr = localStorage.getItem('user');
+    if (!userStr) return { role: '', companyId: '' };
+    try {
+      const user = JSON.parse(userStr);
+      return user;
+    } catch (error) {
+      console.error('Erreur lors de la récupération de l\'utilisateur:', error);
+      return { role: '', companyId: '' };
+    }
+  }
+  return { role: '', companyId: '' };
+};
+
 export default function Postes() {
-  const [postes, setPostes] = useState(initialPostes);
+  const [postes, setPostes] = useState([]);
+  const [entreprises, setEntreprises] = useState([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedPoste, setSelectedPoste] = useState(null);
   const [isEditing, setIsEditing] = useState(false);
+  const [selectedEntrepriseId, setSelectedEntrepriseId] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [currentUser, setCurrentUser] = useState({ role: '', companyId: '' });
+  const [userInitialized, setUserInitialized] = useState(false);
+  
+  // Récupérer l'utilisateur actuel seulement côté client
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const user = getCurrentUser();
+      setCurrentUser(user);
+      setUserInitialized(true);
+    }
+  }, []);
 
+  const isAdmin = currentUser?.role === 'admin';
+
+  // Récupérer les entreprises (uniquement pour les admins)
+  useEffect(() => {
+    if (isAdmin) {
+      const fetchEntreprises = async () => {
+        try {
+          const response = await axios.get('http://localhost:5000/api/company', {
+            headers: { Authorization: `Bearer ${getAuthToken()}` }
+          });
+          setEntreprises(response.data.data.map(company => ({
+            id: company.id_company,
+            nom: company.nom
+          })));
+        } catch (error) {
+          console.error('Erreur lors de la récupération des entreprises:', error);
+          toast.error('Erreur lors de la récupération des entreprises', {
+            position: "top-right",
+            autoClose: 5000
+          });
+        }
+      };
+
+      fetchEntreprises();
+    }
+  }, [isAdmin]);
+
+  // Récupérer les postes
+  const fetchPostes = async (companyId) => {
+    if (!companyId) {
+      // Si aucun ID d'entreprise n'est disponible, ne rien faire
+      return;
+    }
+    
+    try {
+      setLoading(true);
+      const response = await axios.get(`http://localhost:5000/api/poste/${companyId}`, {
+        headers: { Authorization: `Bearer ${getAuthToken()}` }
+      });
+      setPostes(response.data.data);
+    } catch (error) {
+      console.error('Erreur lors de la récupération des postes:', error);
+      toast.error('Erreur lors de la récupération des postes', {
+        position: "top-right",
+        autoClose: 5000
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Effet pour charger les postes
+  useEffect(() => {
+    if (!userInitialized) return; // Attendre que l'utilisateur soit initialisé
+
+    if (isAdmin) {
+      if (selectedEntrepriseId) {
+        fetchPostes(selectedEntrepriseId);
+      }
+    } else if (currentUser.companyId) {
+      fetchPostes(currentUser.companyId);
+    }
+  }, [selectedEntrepriseId, isAdmin, currentUser.companyId, userInitialized]);
+
+  // Initialiser le formulaire avec des valeurs par défaut
   const formik = useFormik({
     initialValues: {
-      posteName: '',
+      nom: '',
+      id_company: isAdmin ? '' : currentUser.companyId
     },
-    validationSchema: posteSchema,
-    onSubmit: (values) => {
-      if (isEditing) {
-        // Modification
-        const updatedPostes = postes.map(poste =>
-          poste.id === selectedPoste.id
-            ? { ...poste, name: values.posteName }
-            : poste
-        );
-        setPostes(updatedPostes);
-        
-        toast.success('Poste modifié avec succès', {
-          position: "top-right",
-          autoClose: 5000
-        });
-      } else {
-        // Ajout
-        const newPoste = {
-          id: postes.length + 1,
-          code: `POS${String(postes.length + 1).padStart(3, '0')}`,
-          name: values.posteName,
-          employeesCount: 0
+    enableReinitialize: true, // Important pour mettre à jour les valeurs quand currentUser change
+    validationSchema: isEditing ? editPosteSchema : addPosteSchema,
+    onSubmit: async (values) => {
+      try {
+        // S'assurer que id_company est correctement défini pour les utilisateurs non-admin
+        const dataToSubmit = { 
+          ...values,
+          id_company: isAdmin ? values.id_company : currentUser.companyId
         };
-        setPostes([...postes, newPoste]);
         
-        toast.success('Poste ajouté avec succès', {
+        if (isEditing) {
+          await axios.put(`http://localhost:5000/api/poste/${selectedPoste.id_poste}`, dataToSubmit, {
+            headers: { Authorization: `Bearer ${getAuthToken()}` }
+          });
+          toast.success('Poste modifié avec succès', {
+            position: "top-right",
+            autoClose: 5000
+          });
+        } else {
+          await axios.post('http://localhost:5000/api/poste', dataToSubmit, {
+            headers: { Authorization: `Bearer ${getAuthToken()}` }
+          });
+          toast.success('Poste ajouté avec succès', {
+            position: "top-right",
+            autoClose: 5000
+          });
+        }
+        
+        // Recharger les postes après l'opération
+        if (isAdmin) {
+          if (selectedEntrepriseId) {
+            fetchPostes(selectedEntrepriseId);
+          }
+        } else {
+          fetchPostes(currentUser.companyId);
+        }
+        
+        handleCloseModal();
+      } catch (error) {
+        console.error('Erreur lors de l\'opération:', error);
+        toast.error(`Erreur: ${error.response?.data?.message || 'Une erreur est survenue'}`, {
           position: "top-right",
           autoClose: 5000
         });
       }
-      
-      handleCloseModal();
     },
   });
 
+  // Mettre à jour le formulaire quand l'utilisateur est initialisé
+  useEffect(() => {
+    if (userInitialized && !isAdmin) {
+      formik.setFieldValue('id_company', currentUser.companyId);
+    }
+  }, [userInitialized, currentUser.companyId, isAdmin]);
+
   const handleEdit = (poste) => {
     setSelectedPoste(poste);
-    formik.setFieldValue('posteName', poste.name);
+    formik.setValues({
+      nom: poste.nom,
+      id_company: isAdmin ? poste.id_company : currentUser.companyId
+    });
     setIsEditing(true);
     setIsModalOpen(true);
   };
@@ -82,21 +210,40 @@ export default function Postes() {
   const handleDelete = (poste) => {
     Swal.fire({
       title: 'Confirmer la suppression',
-      text: `Voulez-vous vraiment supprimer le poste "${poste.name}" ?`,
+      text: `Voulez-vous vraiment supprimer le poste "${poste.nom}" ?`,
       icon: 'warning',
       showCancelButton: true,
       confirmButtonColor: '#d33',
       cancelButtonColor: '#3085d6',
       confirmButtonText: 'Supprimer',
       cancelButtonText: 'Annuler'
-    }).then((result) => {
+    }).then(async (result) => {
       if (result.isConfirmed) {
-        const updatedPostes = postes.filter(p => p.id !== poste.id);
-        setPostes(updatedPostes);
-        toast.success('Poste supprimé avec succès', {
-          position: "top-right",
-          autoClose: 5000
-        });
+        try {
+          await axios.delete(`http://localhost:5000/api/poste/${poste.id_poste}`, {
+            headers: { Authorization: `Bearer ${getAuthToken()}` }
+          });
+          
+          // Recharger les postes après la suppression
+          if (isAdmin) {
+            if (selectedEntrepriseId) {
+              fetchPostes(selectedEntrepriseId);
+            }
+          } else {
+            fetchPostes(currentUser.companyId);
+          }
+          
+          toast.success('Poste supprimé avec succès', {
+            position: "top-right",
+            autoClose: 5000
+          });
+        } catch (error) {
+          console.error('Erreur lors de la suppression:', error);
+          toast.error(`Erreur: ${error.response?.data?.message || 'Une erreur est survenue lors de la suppression'}`, {
+            position: "top-right",
+            autoClose: 5000
+          });
+        }
       }
     });
   };
@@ -108,6 +255,11 @@ export default function Postes() {
     setSelectedPoste(null);
   };
 
+  const getEntrepriseName = (id) => {
+    const entreprise = entreprises.find(ent => ent.id === id);
+    return entreprise ? entreprise.nom : 'Non défini';
+  };
+
   return (
     <MainLayout>
       <div className="p-6">
@@ -117,7 +269,17 @@ export default function Postes() {
         <div className="flex justify-between items-center mb-6">
           <h1 className="text-2xl font-bold text-gray-800">Postes</h1>
           <button
-            onClick={() => setIsModalOpen(true)}
+            onClick={() => {
+              // Reset le formulaire avant d'ouvrir le modal
+              formik.resetForm({
+                values: {
+                  nom: '',
+                  id_company: isAdmin ? '' : currentUser.companyId
+                }
+              });
+              setIsEditing(false);
+              setIsModalOpen(true);
+            }}
             className="flex items-center px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors"
           >
             <PlusIcon className="w-5 h-5 mr-2" />
@@ -125,39 +287,85 @@ export default function Postes() {
           </button>
         </div>
 
+        {/* Filtre par entreprise (uniquement pour les admins) */}
+        {isAdmin && (
+          <div className="mb-6">
+            <label 
+              htmlFor="entrepriseFilter" 
+              className="block text-sm font-medium text-gray-700 mb-2"
+            >
+              Filtrer par entreprise
+            </label>
+            <select
+              id="entrepriseFilter"
+              value={selectedEntrepriseId}
+              onChange={(e) => setSelectedEntrepriseId(e.target.value)}
+              className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-emerald-500 focus:border-emerald-500"
+            >
+              <option value="">Sélectionner une entreprise</option>
+              {entreprises.map((entreprise) => (
+                <option key={entreprise.id} value={entreprise.id}>
+                  {entreprise.nom}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+
+        {/* Message de chargement ou d'erreur */}
+        {loading ? (
+          <div className="text-center py-4">Chargement des postes...</div>
+        ) : (!isAdmin && !currentUser.companyId) ? (
+          <div className="text-center py-4 text-red-500">Impossible de charger les postes. ID d'entreprise non disponible.</div>
+        ) : (isAdmin && !selectedEntrepriseId) ? (
+          <div className="text-center py-4">Veuillez sélectionner une entreprise pour voir les postes.</div>
+        ) : null}
+
         {/* Tableau */}
         <div className="overflow-x-auto">
           <table className="min-w-full bg-white rounded-lg overflow-hidden">
             <thead className="bg-gray-50">
               <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Code</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nom du poste</th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Nombre d'employés</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID</th>
+                {isAdmin && (
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Entreprise</th>
+                )}
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nom</th>
                 <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
-              {postes.map((poste) => (
-                <tr key={poste.id} className="hover:bg-gray-50">
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{poste.code}</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{poste.name}</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 text-right">{poste.employeesCount}</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                    <button
-                      onClick={() => handleEdit(poste)}
-                      className="text-indigo-600 hover:text-indigo-900 mr-3"
-                    >
-                      <PencilIcon className="w-5 h-5" />
-                    </button>
-                    <button
-                      onClick={() => handleDelete(poste)}
-                      className="text-red-600 hover:text-red-900"
-                    >
-                      <TrashIcon className="w-5 h-5" />
-                    </button>
+              {postes.length > 0 ? (
+                postes.map((poste) => (
+                  <tr key={poste.id_poste} className="hover:bg-gray-50">
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{poste.id_poste}</td>
+                    {isAdmin && (
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{getEntrepriseName(poste.id_company)}</td>
+                    )}
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{poste.nom}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                      <button
+                        onClick={() => handleEdit(poste)}
+                        className="text-indigo-600 hover:text-indigo-900 mr-3"
+                      >
+                        <PencilIcon className="w-5 h-5" />
+                      </button>
+                      <button
+                        onClick={() => handleDelete(poste)}
+                        className="text-red-600 hover:text-red-900"
+                      >
+                        <TrashIcon className="w-5 h-5" />
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              ) : (
+                <tr key="no-data">
+                  <td colSpan={isAdmin ? 4 : 3} className="px-6 py-4 text-center text-sm text-gray-500">
+                    Aucun poste trouvé.
                   </td>
                 </tr>
-              ))}
+              )}
             </tbody>
           </table>
         </div>
@@ -175,7 +383,7 @@ export default function Postes() {
               <div className="inline-block w-full max-w-md p-6 my-8 overflow-hidden text-left align-middle transition-all transform bg-white shadow-xl rounded-2xl">
                 <div className="flex justify-between items-center mb-4">
                   <h3 className="text-lg font-medium leading-6 text-gray-900">
-                    {isEditing ? "Modifier le poste" : "Ajouter un poste"}
+                    {isEditing ? "Modifier un poste" : "Ajouter un poste"}
                   </h3>
                   <button
                     onClick={handleCloseModal}
@@ -186,32 +394,83 @@ export default function Postes() {
                 </div>
 
                 <form onSubmit={formik.handleSubmit}>
-                  <div className="mt-2">
-                    <label
-                      htmlFor="posteName"
-                      className="block text-sm font-medium text-gray-700"
-                    >
-                      Nom du poste
-                    </label>
-                    <input
-                      type="text"
-                      id="posteName"
-                      {...formik.getFieldProps('posteName')}
-                      className={`mt-1 block w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-emerald-500 focus:border-emerald-500 ${
-                        formik.touched.posteName && formik.errors.posteName
-                          ? 'border-red-300'
-                          : 'border-gray-300'
-                      }`}
-                      placeholder="Saisir le nom du poste"
-                    />
-                    {formik.touched.posteName && formik.errors.posteName && (
-                      <div className="mt-1 text-sm text-red-600">
-                        {formik.errors.posteName}
+                  <div className="space-y-4">
+                    {/* Entreprise (uniquement pour les admins) */}
+                    {isAdmin && (
+                      <div>
+                        <label
+                          htmlFor="id_company"
+                          className="block text-sm font-medium text-gray-700"
+                        >
+                          Entreprise
+                        </label>
+                        <select
+                          id="id_company"
+                          name="id_company"
+                          value={formik.values.id_company}
+                          onChange={formik.handleChange}
+                          onBlur={formik.handleBlur}
+                          className={`mt-1 block w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-emerald-500 focus:border-emerald-500 ${
+                            formik.touched.id_company && formik.errors.id_company
+                              ? 'border-red-300'
+                              : 'border-gray-300'
+                          }`}
+                        >
+                          <option value="">Sélectionner une entreprise</option>
+                          {entreprises.map((entreprise) => (
+                            <option key={entreprise.id} value={entreprise.id}>
+                              {entreprise.nom}
+                            </option>
+                          ))}
+                        </select>
+                        {formik.touched.id_company && formik.errors.id_company && (
+                          <div className="mt-1 text-sm text-red-600">
+                            {formik.errors.id_company}
+                          </div>
+                        )}
                       </div>
+                    )}
+
+                    {/* Nom du poste */}
+                    <div>
+                      <label
+                        htmlFor="nom"
+                        className="block text-sm font-medium text-gray-700"
+                      >
+                        Nom du poste
+                      </label>
+                      <input
+                        type="text"
+                        id="nom"
+                        name="nom"
+                        value={formik.values.nom}
+                        onChange={formik.handleChange}
+                        onBlur={formik.handleBlur}
+                        className={`mt-1 block w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-emerald-500 focus:border-emerald-500 ${
+                          formik.touched.nom && formik.errors.nom
+                            ? 'border-red-300'
+                            : 'border-gray-300'
+                        }`}
+                        placeholder="Saisir le nom du poste"
+                      />
+                      {formik.touched.nom && formik.errors.nom && (
+                        <div className="mt-1 text-sm text-red-600">
+                          {formik.errors.nom}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Champ caché pour id_company pour les non-admin */}
+                    {!isAdmin && (
+                      <input 
+                        type="hidden" 
+                        name="id_company" 
+                        value={currentUser.companyId || ''} 
+                      />
                     )}
                   </div>
 
-                  <div className="mt-4 flex justify-end gap-2">
+                  <div className="mt-6 flex justify-end gap-2">
                     <button
                       type="button"
                       className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200"
@@ -221,7 +480,8 @@ export default function Postes() {
                     </button>
                     <button
                       type="submit"
-                      className="px-4 py-2 text-sm font-medium text-white bg-emerald-600 rounded-md hover:bg-emerald-700"
+                      disabled={formik.isSubmitting}
+                      className="px-4 py-2 text-sm font-medium text-white bg-emerald-600 rounded-md hover:bg-emerald-700 disabled:bg-emerald-400"
                     >
                       {isEditing ? "Modifier" : "Ajouter"}
                     </button>

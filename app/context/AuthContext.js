@@ -1,6 +1,7 @@
 'use client';
 import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
+import axios from 'axios';
 
 // Créer le contexte
 const AuthContext = createContext();
@@ -25,6 +26,17 @@ export const AuthProvider = ({ children }) => {
   const clearLocalStorage = () => {
     localStorage.clear();
   };
+
+  // Configurer axios avec le token d'authentification
+  useEffect(() => {
+    if (user && user.token) {
+      // Définir le token dans les headers par défaut pour toutes les futures requêtes
+      axios.defaults.headers.common['Authorization'] = `Bearer ${user.token}`;
+    } else {
+      // Supprimer le header d'autorisation si l'utilisateur n'est pas connecté
+      delete axios.defaults.headers.common['Authorization'];
+    }
+  }, [user]);
 
   // Fonction pour rafraîchir le timer de session
   const refreshSession = () => {
@@ -123,6 +135,12 @@ export const AuthProvider = ({ children }) => {
         // La session est encore valide
         const userData = JSON.parse(storedUser);
         setUser(userData);
+        
+        // Configurer axios avec le token stocké
+        if (userData.token) {
+          axios.defaults.headers.common['Authorization'] = `Bearer ${userData.token}`;
+        }
+        
         refreshSession();
       }
     }
@@ -147,6 +165,11 @@ export const AuthProvider = ({ children }) => {
     document.cookie = `user=true; path=/; max-age=${SESSION_DURATION / 1000}`;
     document.cookie = `userRole=${userData.role}; path=/; max-age=${SESSION_DURATION / 1000}`;
     
+    // Configurer axios avec le token
+    if (userData.token) {
+      axios.defaults.headers.common['Authorization'] = `Bearer ${userData.token}`;
+    }
+    
     router.push('/Dashboard');
   };
 
@@ -160,6 +183,9 @@ export const AuthProvider = ({ children }) => {
     // Supprimer les cookies
     document.cookie = 'user=; path=/; max-age=0';
     document.cookie = 'userRole=; path=/; max-age=0';
+    
+    // Supprimer le header d'autorisation
+    delete axios.defaults.headers.common['Authorization'];
     
     // Nettoyer le timer de session
     if (sessionTimerRef.current) {
@@ -180,6 +206,11 @@ export const AuthProvider = ({ children }) => {
     return user?.role === 'admin';
   };
 
+  // Récupérer le token d'authentification
+  const getToken = () => {
+    return user?.token || null;
+  };
+
   // Valeurs à partager dans le contexte
   const value = {
     user,
@@ -187,7 +218,8 @@ export const AuthProvider = ({ children }) => {
     login,
     logout,
     isAdmin,
-    refreshSession
+    refreshSession,
+    getToken
   };
 
   return (

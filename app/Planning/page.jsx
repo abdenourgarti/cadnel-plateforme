@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import axios from 'axios';
 import { ToastContainer, toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import { Dialog } from '@headlessui/react';
@@ -11,49 +12,7 @@ import { PlusIcon, PencilIcon, TrashIcon, XMarkIcon } from '@heroicons/react/24/
 import MainLayout from '@/components/layouts/MainLayout';
 import { Switch } from '@headlessui/react';
 
-// Données de démonstration pour les plannings
-const initialPlannings = [
-  { 
-    id: 1, 
-    nom: "Planning standard bureaux", 
-    type: "Standard",
-    joursTravail: 5,
-    rotation: null
-  },
-  { 
-    id: 2, 
-    nom: "Planning rotation gardiens", 
-    type: "Rotation",
-    joursTravail: null,
-    rotation: "24/48"
-  },
-  { 
-    id: 3, 
-    nom: "Planning week-end", 
-    type: "Standard",
-    joursTravail: 2,
-    rotation: null
-  },
-];
-
-// Données pour les jours de la semaine
-const joursSemaine = [
-  { id: 1, nom: "Lundi" },
-  { id: 2, nom: "Mardi" },
-  { id: 3, nom: "Mercredi" },
-  { id: 4, nom: "Jeudi" },
-  { id: 5, nom: "Vendredi" },
-  { id: 6, nom: "Samedi" },
-  { id: 7, nom: "Dimanche" },
-];
-
-// Options pour le type de planning
-const typePlanningOptions = [
-  { id: 1, value: "Standard", label: "Standard" },
-  { id: 2, value: "Rotation", label: "Rotation" },
-];
-
-// Schéma de validation pour le planning standard
+// Schéma de validation pour le planning Standard
 const planningStandardSchema = Yup.object().shape({
   nom: Yup.string()
     .min(2, 'Le nom doit contenir au moins 2 caractères')
@@ -61,25 +20,30 @@ const planningStandardSchema = Yup.object().shape({
     .required('Le nom du planning est requis'),
   type: Yup.string()
     .required('Le type de planning est requis'),
-  jours: Yup.array().of(
-    Yup.object().shape({
-      estJourTravail: Yup.boolean(),
-      heureDebut: Yup.string()
-        .when('estJourTravail', {
-          is: true,
-          then: () => Yup.string().required('L\'heure de début est requise'),
-        }),
-      heureFin: Yup.string()
-        .when('estJourTravail', {
-          is: true,
-          then: () => Yup.string().required('L\'heure de fin est requise'),
-        }),
-      jourSuivant: Yup.boolean(),
-    })
-  ),
+  jours: Yup.array()
+    .of(
+      Yup.object().shape({
+        nombrejour: Yup.number().required(),
+        heuredebut: Yup.string()
+          .test('required-if-working-day', 'L\'heure de début est requise', function (value) {
+            const { estJourTravail } = this.parent;
+            return !estJourTravail || (estJourTravail && value);
+          }),
+        heurefin: Yup.string()
+          .test('required-if-working-day', 'L\'heure de fin est requise', function (value) {
+            const { estJourTravail } = this.parent;
+            return !estJourTravail || (estJourTravail && value);
+          }),
+        isnext: Yup.boolean(),
+        estJourTravail: Yup.boolean(),
+      })
+    )
+    .test('at-least-one-day', 'Au moins un jour doit être coché', (jours) => {
+      return jours.some((jour) => jour.estJourTravail);
+    }),
 });
 
-// Schéma de validation pour le planning rotation
+// Schéma de validation pour le planning Rotation
 const planningRotationSchema = Yup.object().shape({
   nom: Yup.string()
     .min(2, 'Le nom doit contenir au moins 2 caractères')
@@ -87,150 +51,272 @@ const planningRotationSchema = Yup.object().shape({
     .required('Le nom du planning est requis'),
   type: Yup.string()
     .required('Le type de planning est requis'),
-  dureeTravailHeures: Yup.number()
+  heuretravail: Yup.number()
     .required('La durée de travail est requise')
     .positive('La durée doit être positive')
     .integer('La durée doit être un nombre entier'),
-  dureeReposHeures: Yup.number()
+  heurerepos: Yup.number()
     .required('La durée de repos est requise')
     .positive('La durée doit être positive')
     .integer('La durée doit être un nombre entier'),
-  heurePriseService: Yup.string()
-    .required('L\'heure de prise de service est requise'),
+  heurereprise: Yup.string()
+    .required('L\'heure de reprise est requise'),
+  debutrotation: Yup.string()
+    .required('La date de début de rotation est requise'),
 });
 
+const getAuthToken = () => {
+  if (typeof window !== 'undefined') {
+    const user = JSON.parse(localStorage.getItem('user'));
+    return user?.token;
+  }
+  return null;
+};
+
+const getCurrentUser = () => {
+  if (typeof window !== 'undefined') {
+    const user = JSON.parse(localStorage.getItem('user'));
+    return user;
+  }
+  return { role: '', companyId: '' }; // Valeur par défaut
+};
+
 export default function Plannings() {
-  const [plannings, setPlannings] = useState(initialPlannings);
+  const [plannings, setPlannings] = useState([]);
+  const [entreprises, setEntreprises] = useState([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedPlanning, setSelectedPlanning] = useState(null);
   const [isEditing, setIsEditing] = useState(false);
-  const [currentValidationSchema, setCurrentValidationSchema] = useState(planningStandardSchema);
+  const [selectedEntrepriseId, setSelectedEntrepriseId] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [currentUser, setCurrentUser] = useState({ role: '', companyId: '' });
+  const [joursLocaux, setJoursLocaux] = useState([]);
 
-  // Initialisation du formulaire avec des valeurs par défaut
+  const isAdmin = currentUser?.role === 'admin';
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const user = getCurrentUser();
+      setCurrentUser(user);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (isAdmin) {
+      fetchEntreprises();
+    } else {
+      fetchPlannings(currentUser.companyId);
+    }
+  }, [isAdmin, currentUser.companyId]);
+
+  const fetchEntreprises = async () => {
+    try {
+      const response = await axios.get('http://localhost:5000/api/company', {
+        headers: { Authorization: `Bearer ${getAuthToken()}` }
+      });
+      setEntreprises(response.data.data);
+    } catch (error) {
+      console.error('Erreur lors de la récupération des entreprises:', error);
+      toast.error('Erreur lors de la récupération des entreprises', {
+        position: "top-right",
+        autoClose: 5000
+      });
+    }
+  };
+
+  const fetchPlannings = async (companyId) => {
+    try {
+      setLoading(true);
+      const response = await axios.get(`http://localhost:5000/api/planning/${companyId}`, {
+        headers: { Authorization: `Bearer ${getAuthToken()}` }
+      });
+      setPlannings(response.data.data);
+    } catch (error) {
+      console.error('Erreur lors de la récupération des plannings:', error);
+      toast.error('Erreur lors de la récupération des plannings', {
+        position: "top-right",
+        autoClose: 5000
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Définition des valeurs initiales du formulaire
+  const getInitialValues = () => ({
+    nom: '',
+    type: 'Standard', // Valeur par défaut
+    jours: Array.from({ length: 7 }, (_, i) => ({
+      nombrejour: i + 1,
+      heuredebut: '',
+      heurefin: '',
+      isnext: false,
+      estJourTravail: false,
+    })),
+    heuretravail: 24,
+    heurerepos: 48,
+    heurereprise: '07:00',
+    debutrotation: new Date().toISOString().split('T')[0], // Ajout du champ debutrotation avec la date du jour
+    id_company: isAdmin ? '' : currentUser.companyId,
+  });
+
   const formik = useFormik({
-    initialValues: {
-      nom: '',
-      type: 'Standard',
-      dureeTravailHeures: 24,
-      dureeReposHeures: 48,
-      heurePriseService: '07:00',
-      jours: joursSemaine.map(jour => ({
-        id: jour.id,
-        nom: jour.nom,
-        estJourTravail: false,
-        heureDebut: '09:00',
-        heureFin: '17:00',
-        jourSuivant: false,
-      })),
+    initialValues: getInitialValues(),
+    validationSchema: () => {
+      return formik.values.type === 'Standard' 
+        ? planningStandardSchema 
+        : planningRotationSchema;
     },
-    validationSchema: currentValidationSchema,
-    onSubmit: (values) => {
-      if (isEditing) {
-        // Modification
-        const updatedPlannings = plannings.map(planning =>
-          planning.id === selectedPlanning.id
-            ? { 
-                ...planning, 
-                nom: values.nom,
-                // Le type ne change pas en modification
-                joursTravail: values.type === 'Standard' 
-                  ? values.jours.filter(j => j.estJourTravail).length 
-                  : null,
-                rotation: values.type === 'Rotation' 
-                  ? `${values.dureeTravailHeures}/${values.dureeReposHeures}` 
-                  : null,
-              }
-            : planning
-        );
-        setPlannings(updatedPlannings);
-        
-        toast.success('Planning modifié avec succès', {
-          position: "top-right",
-          autoClose: 5000
-        });
-      } else {
-        // Ajout
-        const newPlanning = {
-          id: plannings.length + 1,
+    onSubmit: async (values) => {
+      try {
+        const payload = {
           nom: values.nom,
           type: values.type,
-          joursTravail: values.type === 'Standard' 
-            ? values.jours.filter(j => j.estJourTravail).length 
-            : null,
-          rotation: values.type === 'Rotation' 
-            ? `${values.dureeTravailHeures}/${values.dureeReposHeures}` 
-            : null,
+          id_company: isAdmin ? values.id_company : currentUser.companyId,
         };
-        setPlannings([...plannings, newPlanning]);
+
+        if (values.type === 'Standard') {
+          payload.jours = joursLocaux
+            .filter((jour) => jour.estJourTravail)
+            .map((jour) => ({
+              nombrejour: jour.nombrejour,
+              heuredebut: jour.heuredebut,
+              heurefin: jour.heurefin,
+              isnext: jour.isnext,
+            }));
+        } else {
+          payload.heuretravail = values.heuretravail;
+          payload.heurerepos = values.heurerepos;
+          payload.heurereprise = values.heurereprise;
+          payload.debutrotation = values.debutrotation; // Ajout du champ debutrotation
+        }
+
+        console.log('payload', payload);
         
-        toast.success('Planning ajouté avec succès', {
+        if (isEditing) {
+          await axios.put(`http://localhost:5000/api/planning/${selectedPlanning.id_planning}`, payload, {
+            headers: { Authorization: `Bearer ${getAuthToken()}` }
+          });
+          toast.success('Planning modifié avec succès', {
+            position: "top-right",
+            autoClose: 5000
+          });
+        } else {
+          await axios.post('http://localhost:5000/api/planning', payload, {
+            headers: { Authorization: `Bearer ${getAuthToken()}` }
+          });
+          toast.success('Planning ajouté avec succès', {
+            position: "top-right",
+            autoClose: 5000
+          });
+        }
+
+        const companyId = isAdmin ? payload.id_company : currentUser.companyId;
+        fetchPlannings(companyId);
+        handleCloseModal();
+      } catch (error) {
+        console.error('Erreur lors de l\'opération:', error);
+        toast.error(`Erreur: ${error.response?.data?.message || 'Une erreur est survenue'}`, {
           position: "top-right",
           autoClose: 5000
         });
       }
-      
-      handleCloseModal();
     },
   });
 
-  // Mise à jour du schéma de validation lorsque le type de planning change
+  // Réinitialiser les jours locaux quand le modal s'ouvre ou le type change
+  useEffect(() => {
+    if (isModalOpen) {
+      // Si nous éditons, les jours seront déjà définis
+      if (!isEditing || formik.values.type !== 'Standard') {
+        resetJoursLocaux();
+      }
+    }
+  }, [isModalOpen, formik.values.type]);
+
+  // Fonction pour réinitialiser les jours locaux
+  const resetJoursLocaux = () => {
+    if (formik.values.type === 'Standard') {
+      setJoursLocaux(
+        Array.from({ length: 7 }, (_, i) => ({
+          nombrejour: i + 1,
+          heuredebut: '',
+          heurefin: '',
+          isnext: false,
+          estJourTravail: false,
+        }))
+      );
+    } else {
+      setJoursLocaux([]);
+    }
+  };
+
   useEffect(() => {
     if (formik.values.type === 'Standard') {
-      setCurrentValidationSchema(planningStandardSchema);
+      if (!isEditing) {
+        formik.setValues({
+          ...formik.values,
+          jours: Array.from({ length: 7 }, (_, i) => ({
+            nombrejour: i + 1,
+            heuredebut: '',
+            heurefin: '',
+            isnext: false,
+            estJourTravail: false,
+          })),
+        });
+        resetJoursLocaux();
+      }
     } else {
-      setCurrentValidationSchema(planningRotationSchema);
+      formik.setValues({
+        ...formik.values,
+        jours: [],
+      });
+      setJoursLocaux([]);
     }
   }, [formik.values.type]);
 
   const handleEdit = (planning) => {
     setSelectedPlanning(planning);
-
-    // Préparer les données pour le formulaire selon le type de planning
-    let initialData = {
+    
+    // Préparation des valeurs initiales
+    const initialValues = {
       nom: planning.nom,
-      type: planning.type,
+      type: planning.type.charAt(0).toUpperCase() + planning.type.slice(1), // Première lettre en majuscule
+      id_company: planning.id_company,
     };
 
-    if (planning.type === 'Standard') {
-      // Simuler les données des jours pour l'exemple
-      // Dans une application réelle, vous chargeriez ces données depuis la base de données
-      initialData.jours = joursSemaine.map(jour => {
-        const estJourTravail = jour.id <= planning.joursTravail; // Exemple simple
+    if (planning.type.toLowerCase() === 'standard') {
+      // Créer un tableau avec les 7 jours
+      const standardJours = Array.from({ length: 7 }, (_, i) => {
+        const jour = planning.jours?.find((j) => parseInt(j.nombrejour) === i + 1);
+        // Si le jour existe dans les données, il est travaillé
         return {
-          id: jour.id,
-          nom: jour.nom,
-          estJourTravail: estJourTravail,
-          heureDebut: estJourTravail ? '09:00' : '',
-          heureFin: estJourTravail ? '17:00' : '',
-          jourSuivant: false,
+          nombrejour: i + 1,
+          heuredebut: jour ? jour.heuredebut : '',
+          heurefin: jour ? jour.heurefin : '',
+          isnext: jour ? jour.isnext : false,
+          estJourTravail: !!jour, // true si le jour existe
         };
       });
+      
+      initialValues.jours = standardJours;
+      setJoursLocaux(standardJours);
     } else {
-      // Récupérer les valeurs pour le planning de rotation
-      const [dureeTravail, dureeRepos] = planning.rotation.split('/').map(Number);
-      initialData.dureeTravailHeures = dureeTravail;
-      initialData.dureeReposHeures = dureeRepos;
-      initialData.heurePriseService = '07:00'; // Exemple pour l'heure de prise de service
+      // Pour les plannings de type rotation
+      const jourtravailrotation = planning.jours && planning.jours[0] ? planning.jours[0] : {};
+      
+      initialValues.heuretravail = jourtravailrotation.heuretravail || 24;
+      initialValues.heurerepos = jourtravailrotation.heurerepos || 48;
+      initialValues.heurereprise = jourtravailrotation.heurereprise || '07:00';
+      initialValues.debutrotation = jourtravailrotation.debutrotation || new Date().toISOString().split('T')[0];
     }
 
-    formik.setValues(initialData);
+    formik.setValues(initialValues);
     setIsEditing(true);
     setIsModalOpen(true);
   };
 
   const handleDelete = (planning) => {
-    // Vérifier si c'est le dernier planning
-    if (plannings.length === 1) {
-      Swal.fire({
-        title: 'Opération impossible',
-        text: 'Vous devez avoir au moins un planning dans le système.',
-        icon: 'warning',
-        confirmButtonColor: '#3085d6',
-        confirmButtonText: 'OK'
-      });
-      return;
-    }
-
     Swal.fire({
       title: 'Confirmer la suppression',
       text: `Voulez-vous vraiment supprimer le planning "${planning.nom}" ?`,
@@ -240,14 +326,24 @@ export default function Plannings() {
       cancelButtonColor: '#3085d6',
       confirmButtonText: 'Supprimer',
       cancelButtonText: 'Annuler'
-    }).then((result) => {
+    }).then(async (result) => {
       if (result.isConfirmed) {
-        const updatedPlannings = plannings.filter(p => p.id !== planning.id);
-        setPlannings(updatedPlannings);
-        toast.success('Planning supprimé avec succès', {
-          position: "top-right",
-          autoClose: 5000
-        });
+        try {
+          await axios.delete(`http://localhost:5000/api/planning/${planning.id_planning}`, {
+            headers: { Authorization: `Bearer ${getAuthToken()}` }
+          });
+          fetchPlannings(planning.id_company);
+          toast.success('Planning supprimé avec succès', {
+            position: "top-right",
+            autoClose: 5000
+          });
+        } catch (error) {
+          console.error('Erreur lors de la suppression:', error);
+          toast.error(`Erreur: ${error.response?.data?.message || 'Une erreur est survenue lors de la suppression'}`, {
+            position: "top-right",
+            autoClose: 5000
+          });
+        }
       }
     });
   };
@@ -256,53 +352,59 @@ export default function Plannings() {
     setIsModalOpen(false);
     setIsEditing(false);
     formik.resetForm();
+    setJoursLocaux([]);
     setSelectedPlanning(null);
   };
 
   const handleJourTravailChange = (index, checked) => {
-    const updatedJours = [...formik.values.jours];
-    updatedJours[index] = {
-      ...updatedJours[index],
-      estJourTravail: checked
-    };
-    formik.setFieldValue('jours', updatedJours);
+    const updatedJours = [...joursLocaux];
+    updatedJours[index].estJourTravail = checked;
+    setJoursLocaux(updatedJours);
+    formik.setFieldValue(`jours[${index}]`, updatedJours[index]);
   };
 
   const handleHeureChange = (index, field, value) => {
-    const updatedJours = [...formik.values.jours];
-    updatedJours[index] = {
-      ...updatedJours[index],
-      [field]: value
-    };
-    formik.setFieldValue('jours', updatedJours);
+    const updatedJours = [...joursLocaux];
+    updatedJours[index][field] = value;
+    setJoursLocaux(updatedJours);
+    formik.setFieldValue(`jours[${index}]`, updatedJours[index]);
   };
 
   const handleJourSuivantChange = (index, checked) => {
-    const updatedJours = [...formik.values.jours];
-    updatedJours[index] = {
-      ...updatedJours[index],
-      jourSuivant: checked
-    };
-    formik.setFieldValue('jours', updatedJours);
+    const updatedJours = [...joursLocaux];
+    updatedJours[index].isnext = checked;
+    setJoursLocaux(updatedJours);
+    formik.setFieldValue(`jours[${index}]`, updatedJours[index]);
   };
 
-  const compterJoursTravail = (planning) => {
-    if (planning.type === 'Standard') {
-      return planning.joursTravail;
+  const getEntrepriseName = (id) => {
+    const entreprise = entreprises.find((ent) => ent.id_company === id);
+    return entreprise ? entreprise.nom : 'Non défini';
+  };
+
+  // Fonction pour formater l'affichage de la rotation
+  const formatRotation = (planning) => {
+    if (planning.type.toLowerCase() !== 'rotation' || !planning.jours || planning.jours.length === 0) {
+      return '-';
     }
-    return '-';
+    
+    const rotation = planning.jours[0];
+    return `${rotation.heuretravail || '-'}h / ${rotation.heurerepos || '-'}h`;
   };
 
   return (
     <MainLayout>
       <div className="p-6">
         <ToastContainer />
-        
         {/* En-tête */}
         <div className="flex justify-between items-center mb-6">
           <h1 className="text-2xl font-bold text-gray-800">Plannings</h1>
           <button
-            onClick={() => setIsModalOpen(true)}
+            onClick={() => {
+              formik.resetForm();
+              resetJoursLocaux();
+              setIsModalOpen(true);
+            }}
             className="flex items-center px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors"
           >
             <PlusIcon className="w-5 h-5 mr-2" />
@@ -310,11 +412,44 @@ export default function Plannings() {
           </button>
         </div>
 
+        {/* Filtre par entreprise (uniquement pour les admins) */}
+        {isAdmin && (
+          <div className="mb-6">
+            <label 
+              htmlFor="entrepriseFilter" 
+              className="block text-sm font-medium text-gray-700 mb-2"
+            >
+              Filtrer par entreprise
+            </label>
+            <select
+              id="entrepriseFilter"
+              value={selectedEntrepriseId}
+              onChange={(e) => {
+                setSelectedEntrepriseId(e.target.value);
+                fetchPlannings(e.target.value);
+              }}
+              className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-emerald-500 focus:border-emerald-500"
+            >
+              <option value="">Sélectionner une entreprise</option>
+              {entreprises.map((entreprise) => (
+                <option key={entreprise.id_company} value={entreprise.id_company}>
+                  {entreprise.nom}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+
         {/* Tableau */}
         <div className="overflow-x-auto">
           <table className="min-w-full bg-white rounded-lg overflow-hidden">
             <thead className="bg-gray-50">
               <tr>
+                {isAdmin && (
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Entreprise
+                  </th>
+                )}
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nom du planning</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Jours de travail</th>
@@ -323,28 +458,50 @@ export default function Plannings() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
-              {plannings.map((planning) => (
-                <tr key={planning.id} className="hover:bg-gray-50">
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{planning.nom}</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{planning.type}</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{compterJoursTravail(planning)}</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{planning.rotation || '-'}</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                    <button
-                      onClick={() => handleEdit(planning)}
-                      className="text-indigo-600 hover:text-indigo-900 mr-3"
-                    >
-                      <PencilIcon className="w-5 h-5" />
-                    </button>
-                    <button
-                      onClick={() => handleDelete(planning)}
-                      className="text-red-600 hover:text-red-900"
-                    >
-                      <TrashIcon className="w-5 h-5" />
-                    </button>
+              {plannings.length === 0 ? (
+                <tr>
+                  <td 
+                    colSpan={isAdmin ? 6 : 5} 
+                    className="px-6 py-4 text-center text-sm text-gray-500"
+                  >
+                    Aucun planning trouvé
                   </td>
                 </tr>
-              ))}
+              ) : (
+                plannings.map((planning) => (
+                  <tr key={planning.id_planning} className="hover:bg-gray-50">
+                    {isAdmin && (
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {getEntrepriseName(planning.id_company)}
+                      </td>
+                    )}
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{planning.nom}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {planning.type.charAt(0).toUpperCase() + planning.type.slice(1)}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {planning.type.toLowerCase() === 'standard' ? (planning.jours?.length || 0) : '-'}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {formatRotation(planning)}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                      <button
+                        onClick={() => handleEdit(planning)}
+                        className="text-indigo-600 hover:text-indigo-900 mr-3"
+                      >
+                        <PencilIcon className="w-5 h-5" />
+                      </button>
+                      <button
+                        onClick={() => handleDelete(planning)}
+                        className="text-red-600 hover:text-red-900"
+                      >
+                        <TrashIcon className="w-5 h-5" />
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>
@@ -352,17 +509,17 @@ export default function Plannings() {
         {/* Modal Ajout/Modification */}
         {isModalOpen && (
           <div className="fixed inset-0 z-10 overflow-y-auto">
-            <div className="flex min-h-screen items-center justify-center px-4 pt-20 pb-20 text-center sm:block sm:p-0">
+            <div className="flex min-h-screen items-center justify-center px-4 pt-4 pb-20 text-center sm:block sm:p-0">
               <div className="fixed inset-0 bg-black bg-opacity-30 transition-opacity" aria-hidden="true" />
-        
+
               <span className="hidden sm:inline-block sm:h-screen sm:align-middle" aria-hidden="true">
                 &#8203;
               </span>
-        
-              <div className="inline-block w-full max-w-3xl p-6 my-12 overflow-hidden text-left align-middle transition-all transform bg-white shadow-xl rounded-2xl">
+
+              <div className="inline-block w-full max-w-3xl p-6 my-8 overflow-hidden text-left align-middle transition-all transform bg-white shadow-xl rounded-2xl">
                 <div className="flex justify-between items-center mb-4">
                   <h3 className="text-lg font-medium leading-6 text-gray-900">
-                    {isEditing ? "Modifier le planning" : "Ajouter un planning"}
+                    {isEditing ? "Modifier un planning" : "Ajouter un planning"}
                   </h3>
                   <button
                     onClick={handleCloseModal}
@@ -371,10 +528,44 @@ export default function Plannings() {
                     <XMarkIcon className="w-6 h-6" />
                   </button>
                 </div>
-        
+
                 <form onSubmit={formik.handleSubmit}>
+                  {/* Entreprise (uniquement pour les admins) */}
+                  {isAdmin && (
+                    <div className="mb-4">
+                      <label
+                        htmlFor="id_company"
+                        className="block text-sm font-medium text-gray-700"
+                      >
+                        Entreprise
+                      </label>
+                      <select
+                        id="id_company"
+                        {...formik.getFieldProps('id_company')}
+                        disabled={isEditing}
+                        className={`mt-1 block w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-emerald-500 focus:border-emerald-500 ${
+                          formik.touched.id_company && formik.errors.id_company
+                            ? 'border-red-300'
+                            : 'border-gray-300'
+                        }`}
+                      >
+                        <option value="">Sélectionner une entreprise</option>
+                        {entreprises.map((entreprise) => (
+                          <option key={entreprise.id_company} value={entreprise.id_company}>
+                            {entreprise.nom}
+                          </option>
+                        ))}
+                      </select>
+                      {formik.touched.id_company && formik.errors.id_company && (
+                        <div className="mt-1 text-sm text-red-600">
+                          {formik.errors.id_company}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Nom et Type */}
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                    {/* Nom du planning */}
                     <div>
                       <label
                         htmlFor="nom"
@@ -399,8 +590,6 @@ export default function Plannings() {
                         </div>
                       )}
                     </div>
-        
-                    {/* Type de planning (liste déroulante) - désactivé en mode édition */}
                     <div>
                       <label
                         htmlFor="type"
@@ -412,17 +601,21 @@ export default function Plannings() {
                         id="type"
                         {...formik.getFieldProps('type')}
                         disabled={isEditing}
-                        className={`mt-1 block w-full pl-3 pr-10 py-2 text-base border rounded-md focus:outline-none focus:ring-emerald-500 focus:border-emerald-500 ${
+                        onChange={(e) => {
+                          formik.handleChange(e);
+                          // Réinitialiser les jours locaux lors du changement de type
+                          if (e.target.value === 'Standard') {
+                            resetJoursLocaux();
+                          }
+                        }}
+                        className={`mt-1 block w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-emerald-500 focus:border-emerald-500 ${
                           formik.touched.type && formik.errors.type
                             ? 'border-red-300'
                             : 'border-gray-300'
-                        } ${isEditing ? 'bg-gray-100' : ''}`}
+                        }`}
                       >
-                        {typePlanningOptions.map((option) => (
-                          <option key={option.id} value={option.value}>
-                            {option.label}
-                          </option>
-                        ))}
+                        <option value="Standard">Standard</option>
+                        <option value="Rotation">Rotation</option>
                       </select>
                       {formik.touched.type && formik.errors.type && (
                         <div className="mt-1 text-sm text-red-600">
@@ -431,159 +624,144 @@ export default function Plannings() {
                       )}
                     </div>
                   </div>
-        
-                  {/* Afficher les champs selon le type de planning */}
-                  {formik.values.type === 'Rotation' ? (
-                    // Champs pour le planning de rotation
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-                      <div>
-                        <label
-                          htmlFor="dureeTravailHeures"
-                          className="block text-sm font-medium text-gray-700"
-                        >
-                          Heures de travail *
-                        </label>
-                        <input
-                          type="number"
-                          id="dureeTravailHeures"
-                          {...formik.getFieldProps('dureeTravailHeures')}
-                          min="1"
-                          className={`mt-1 block w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-emerald-500 focus:border-emerald-500 ${
-                            formik.touched.dureeTravailHeures && formik.errors.dureeTravailHeures
-                              ? 'border-red-300'
-                              : 'border-gray-300'
-                          }`}
-                        />
-                        {formik.touched.dureeTravailHeures && formik.errors.dureeTravailHeures && (
-                          <div className="mt-1 text-sm text-red-600">
-                            {formik.errors.dureeTravailHeures}
-                          </div>
-                        )}
-                      </div>
-                      
-                      <div>
-                        <label
-                          htmlFor="dureeReposHeures"
-                          className="block text-sm font-medium text-gray-700"
-                        >
-                          Heures de repos *
-                        </label>
-                        <input
-                          type="number"
-                          id="dureeReposHeures"
-                          {...formik.getFieldProps('dureeReposHeures')}
-                          min="1"
-                          className={`mt-1 block w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-emerald-500 focus:border-emerald-500 ${
-                            formik.touched.dureeReposHeures && formik.errors.dureeReposHeures
-                              ? 'border-red-300'
-                              : 'border-gray-300'
-                          }`}
-                        />
-                        {formik.touched.dureeReposHeures && formik.errors.dureeReposHeures && (
-                          <div className="mt-1 text-sm text-red-600">
-                            {formik.errors.dureeReposHeures}
-                          </div>
-                        )}
-                      </div>
-                      
-                      <div>
-                        <label
-                          htmlFor="heurePriseService"
-                          className="block text-sm font-medium text-gray-700"
-                        >
-                          Heure de prise de service *
-                        </label>
-                        <input
-                          type="time"
-                          id="heurePriseService"
-                          {...formik.getFieldProps('heurePriseService')}
-                          className={`mt-1 block w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-emerald-500 focus:border-emerald-500 ${
-                            formik.touched.heurePriseService && formik.errors.heurePriseService
-                              ? 'border-red-300'
-                              : 'border-gray-300'
-                          }`}
-                        />
-                        {formik.touched.heurePriseService && formik.errors.heurePriseService && (
-                          <div className="mt-1 text-sm text-red-600">
-                            {formik.errors.heurePriseService}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  ) : (
-                    // Champs pour le planning standard (jours de la semaine)
-                    <div className="mb-4">
+
+                  {/* Champs spécifiques au type de planning */}
+                  {formik.values.type === 'Standard' ? (
+                    <div className="col-span-2">
                       <label className="block text-sm font-medium text-gray-700 mb-2">
                         Jours de travail
                       </label>
-                      
-                      <div className="space-y-3">
-                        {formik.values.jours.map((jour, index) => (
-                          <div key={jour.id} className="grid grid-cols-12 gap-2 items-center">
-                            <div className="col-span-2">
-                              <span className="font-medium text-sm">{jour.nom}</span>
-                            </div>
-                            
-                            <div className="col-span-2">
-                              <Switch
-                                checked={jour.estJourTravail}
-                                onChange={(checked) => handleJourTravailChange(index, checked)}
-                                className={`${
-                                  jour.estJourTravail ? 'bg-emerald-600' : 'bg-gray-200'
-                                } relative inline-flex h-6 w-11 items-center rounded-full`}
-                              >
-                                <span className="sr-only">Jour de travail</span>
-                                <span
-                                  className={`${
-                                    jour.estJourTravail ? 'translate-x-6' : 'translate-x-1'
-                                  } inline-block h-4 w-4 transform rounded-full bg-white transition`}
-                                />
-                              </Switch>
-                            </div>
-                            
-                            {jour.estJourTravail && (
-                              <>
-                                <div className="col-span-3">
-                                  <label htmlFor={`heureDebut-${index}`} className="sr-only">Heure début</label>
-                                  <input
-                                    type="time"
-                                    id={`heureDebut-${index}`}
-                                    value={jour.heureDebut}
-                                    onChange={(e) => handleHeureChange(index, 'heureDebut', e.target.value)}
-                                    className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-emerald-500 focus:border-emerald-500"
-                                  />
-                                </div>
-                                
-                                <div className="col-span-3">
-                                  <label htmlFor={`heureFin-${index}`} className="sr-only">Heure fin</label>
-                                  <input
-                                    type="time"
-                                    id={`heureFin-${index}`}
-                                    value={jour.heureFin}
-                                    onChange={(e) => handleHeureChange(index, 'heureFin', e.target.value)}
-                                    className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-emerald-500 focus:border-emerald-500"
-                                  />
-                                </div>
-                                
-                                <div className="col-span-2 flex items-center">
-                                  <label className="inline-flex items-center">
-                                    <input
-                                      type="checkbox"
-                                      checked={jour.jourSuivant}
-                                      onChange={(e) => handleJourSuivantChange(index, e.target.checked)}
-                                      className="form-checkbox h-4 w-4 text-emerald-600"
-                                    />
-                                    <span className="ml-2 text-sm text-gray-700">+1 jour</span>
-                                  </label>
-                                </div>
-                              </>
-                            )}
+                      {joursLocaux.map((jour, index) => (
+                        <div key={jour.nombrejour} className="grid grid-cols-12 gap-2 items-center mb-2">
+                          <div className="col-span-2">
+                            <span className="font-medium text-sm">Jour {jour.nombrejour}</span>
                           </div>
-                        ))}
+                          <div className="col-span-2">
+                            <Switch
+                              checked={jour.estJourTravail}
+                              onChange={(checked) => handleJourTravailChange(index, checked)}
+                              className={`${
+                                jour.estJourTravail ? 'bg-emerald-600' : 'bg-gray-200'
+                              } relative inline-flex h-6 w-11 items-center rounded-full`}
+                            >
+                              <span className="sr-only">Jour de travail</span>
+                              <span
+                                className={`${
+                                  jour.estJourTravail ? 'translate-x-6' : 'translate-x-1'
+                                } inline-block h-4 w-4 transform rounded-full bg-white transition`}
+                              />
+                            </Switch>
+                          </div>
+                          {jour.estJourTravail && (
+                            <>
+                              <div className="col-span-3">
+                                <input
+                                  type="time"
+                                  value={jour.heuredebut}
+                                  onChange={(e) => handleHeureChange(index, 'heuredebut', e.target.value)}
+                                  className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-emerald-500 focus:border-emerald-500"
+                                />
+                              </div>
+                              <div className="col-span-3">
+                                <input
+                                  type="time"
+                                  value={jour.heurefin}
+                                  onChange={(e) => handleHeureChange(index, 'heurefin', e.target.value)}
+                                  className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-emerald-500 focus:border-emerald-500"
+                                />
+                              </div>
+                              <div className="col-span-2">
+                                <label className="inline-flex items-center">
+                                  <input
+                                    type="checkbox"
+                                    checked={jour.isnext}
+                                    onChange={(e) => handleJourSuivantChange(index, e.target.checked)}
+                                    className="form-checkbox h-4 w-4 text-emerald-600"
+                                  />
+                                  <span className="ml-2 text-sm text-gray-700">+1 jour</span>
+                                </label>
+                              </div>
+                            </>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="col-span-2">
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div>
+                          <label
+                            htmlFor="heuretravail"
+                            className="block text-sm font-medium text-gray-700"
+                          >
+                            Heures de travail *
+                          </label>
+                          <input
+                            type="number"
+                            id="heuretravail"
+                            {...formik.getFieldProps('heuretravail')}
+                            className={`mt-1 block w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-emerald-500 focus:border-emerald-500 ${
+                              formik.touched.heuretravail && formik.errors.heuretravail
+                                ? 'border-red-300'
+                                : 'border-gray-300'
+                            }`}
+                          />
+                          {formik.touched.heuretravail && formik.errors.heuretravail && (
+                            <div className="mt-1 text-sm text-red-600">
+                              {formik.errors.heuretravail}
+                            </div>
+                          )}
+                        </div>
+                        <div>
+                          <label
+                            htmlFor="heurerepos"
+                            className="block text-sm font-medium text-gray-700"
+                          >
+                            Heures de repos *
+                          </label>
+                          <input
+                            type="number"
+                            id="heurerepos"
+                            {...formik.getFieldProps('heurerepos')}
+                            className={`mt-1 block w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-emerald-500 focus:border-emerald-500 ${
+                              formik.touched.heurerepos && formik.errors.heurerepos
+                                ? 'border-red-300'
+                                : 'border-gray-300'
+                            }`}
+                          />
+                          {formik.touched.heurerepos && formik.errors.heurerepos && (
+                            <div className="mt-1 text-sm text-red-600">
+                              {formik.errors.heurerepos}
+                            </div>
+                          )}
+                        </div>
+                        <div>
+                          <label
+                            htmlFor="heurereprise"
+                            className="block text-sm font-medium text-gray-700"
+                          >
+                            Heure de reprise *
+                          </label>
+                          <input
+                            type="time"
+                            id="heurereprise"
+                            {...formik.getFieldProps('heurereprise')}
+                            className={`mt-1 block w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-emerald-500 focus:border-emerald-500 ${
+                              formik.touched.heurereprise && formik.errors.heurereprise
+                                ? 'border-red-300'
+                                : 'border-gray-300'
+                            }`}
+                          />
+                          {formik.touched.heurereprise && formik.errors.heurereprise && (
+                            <div className="mt-1 text-sm text-red-600">
+                              {formik.errors.heurereprise}
+                            </div>
+                          )}
+                        </div>
                       </div>
                     </div>
                   )}
-                  
+
                   <div className="mt-6 flex justify-end gap-2">
                     <button
                       type="button"

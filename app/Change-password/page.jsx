@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ToastContainer, toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import { useFormik } from 'formik';
@@ -8,6 +8,7 @@ import * as Yup from 'yup';
 import { FaEye, FaEyeSlash } from 'react-icons/fa';
 import { useRouter } from 'next/navigation';
 import MainLayout from '@/components/layouts/MainLayout';
+import axios from 'axios';
 
 // Schéma de validation pour le changement de mot de passe
 const changePasswordSchema = Yup.object().shape({
@@ -22,11 +23,38 @@ const changePasswordSchema = Yup.object().shape({
     .required('La confirmation du mot de passe est requise')
 });
 
+// Fonctions d'authentification
+const getAuthToken = () => {
+  if (typeof window !== 'undefined') {
+    const user = JSON.parse(localStorage.getItem('user'));
+    return user?.token;
+  }
+  return null;
+};
+
+const getCurrentUser = () => {
+  if (typeof window !== 'undefined') {
+    const user = JSON.parse(localStorage.getItem('user'));
+    return user || { role: '', id: '' }; // Valeur par défaut
+  }
+  return { role: '', id: '' }; // Valeur par défaut
+};
+
 export default function ChangePassword() {
   const router = useRouter();
   const [showCurrentPassword, setShowCurrentPassword] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [currentUser, setCurrentUser] = useState({ role: '', id: '' });
+  const [isLoading, setIsLoading] = useState(false);
+
+  // Récupérer l'utilisateur actuel seulement côté client
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const user = getCurrentUser();
+      setCurrentUser(user);
+    }
+  }, []);
 
   const formik = useFormik({
     initialValues: {
@@ -35,23 +63,57 @@ export default function ChangePassword() {
       confirmPassword: ''
     },
     validationSchema: changePasswordSchema,
-    onSubmit: (values) => {
-      // Ici, vous pouvez ajouter la logique pour envoyer la demande au serveur
-      console.log('Changement de mot de passe:', values);
-      
-      // Simulation de réussite
-      toast.success('Mot de passe modifié avec succès', {
-        position: "top-right",
-        autoClose: 5000
-      });
-      
-      // Réinitialisation du formulaire
-      formik.resetForm();
-      
-      // Redirection après quelques secondes (optionnel)
-      setTimeout(() => {
-        router.push('/Dashboard');
-      }, 2000);
+    onSubmit: async (values) => {
+      try {
+        setIsLoading(true);
+        const userId = currentUser.id;
+        
+        if (!userId) {
+          toast.error('Utilisateur non connecté', {
+            position: "top-right",
+            autoClose: 5000
+          });
+          return;
+        }
+
+        // Envoi de la requête au backend
+        const response = await axios.put(
+          `http://localhost:5000/api/auth/editpassword/${userId}`, 
+          {
+            oldpassword: values.currentPassword,
+            newpassword: values.newPassword
+          },
+          {
+            headers: { Authorization: `Bearer ${getAuthToken()}` }
+          }
+        );
+
+        // Vérification de la réponse
+        if (response.status === 200) {
+          toast.success('Mot de passe modifié avec succès', {
+            position: "top-right",
+            autoClose: 5000
+          });
+          
+          // Réinitialisation du formulaire
+          formik.resetForm();
+          
+          // Redirection après quelques secondes
+          setTimeout(() => {
+            router.push('/Dashboard');
+          }, 2000);
+        }
+      } catch (error) {
+        // Gestion des erreurs
+        const errorMessage = error.response?.data?.message || 'Une erreur est survenue lors du changement de mot de passe';
+        toast.error(errorMessage, {
+          position: "top-right",
+          autoClose: 5000
+        });
+        console.error('Erreur lors du changement de mot de passe:', error);
+      } finally {
+        setIsLoading(false);
+      }
     },
   });
 
@@ -187,14 +249,16 @@ export default function ChangePassword() {
                 type="button"
                 className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200"
                 onClick={handleCancel}
+                disabled={isLoading}
               >
                 Annuler
               </button>
               <button
                 type="submit"
-                className="px-4 py-2 text-sm font-medium text-white bg-emerald-600 rounded-md hover:bg-emerald-700"
+                className="px-4 py-2 text-sm font-medium text-white bg-emerald-600 rounded-md hover:bg-emerald-700 disabled:bg-emerald-300"
+                disabled={isLoading}
               >
-                Modifier le mot de passe
+                {isLoading ? 'Modification en cours...' : 'Modifier le mot de passe'}
               </button>
             </div>
           </form>
