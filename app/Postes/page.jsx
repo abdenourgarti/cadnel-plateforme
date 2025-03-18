@@ -313,9 +313,7 @@ export default function Postes() {
         )}
 
         {/* Message de chargement ou d'erreur */}
-        {loading ? (
-          <div className="text-center py-4">Chargement des postes...</div>
-        ) : (!isAdmin && !currentUser.companyId) ? (
+        {(!isAdmin && !currentUser.companyId) ? (
           <div className="text-center py-4 text-red-500">Impossible de charger les postes. ID d'entreprise non disponible.</div>
         ) : (isAdmin && !selectedEntrepriseId) ? (
           <div className="text-center py-4">Veuillez sélectionner une entreprise pour voir les postes.</div>
