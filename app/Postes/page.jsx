@@ -324,7 +324,7 @@ export default function Postes() {
           <table className="min-w-full bg-white rounded-lg overflow-hidden">
             <thead className="bg-gray-50">
               <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Numéro</th>
                 {isAdmin && (
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Entreprise</th>
                 )}
@@ -334,9 +334,9 @@ export default function Postes() {
             </thead>
             <tbody className="divide-y divide-gray-200">
               {postes.length > 0 ? (
-                postes.map((poste) => (
+                postes.map((poste, index) => (
                   <tr key={poste.id_poste} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{poste.id_poste}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{index + 1}</td>
                     {isAdmin && (
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{getEntrepriseName(poste.id_company)}</td>
                     )}

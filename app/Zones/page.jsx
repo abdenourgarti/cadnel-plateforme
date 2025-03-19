@@ -364,7 +364,7 @@ export default function Zones() {
             <table className="min-w-full bg-white rounded-lg overflow-hidden">
               <thead className="bg-gray-50">
                 <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Numéro</th>
                   {isAdmin && (
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Entreprise</th>
                   )}
@@ -374,9 +374,9 @@ export default function Zones() {
               </thead>
               <tbody className="divide-y divide-gray-200">
                 {zones.length > 0 ? (
-                  zones.map((zone) => (
+                  zones.map((zone, index) => (
                     <tr key={zone.id_zone} className="hover:bg-gray-50">
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{zone.id_zone}</td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{index + 1}</td>
                       {isAdmin && (
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{getEntrepriseName(zone.id_company)}</td>
                       )}

@@ -352,7 +352,7 @@ export default function Departements() {
             <table className="min-w-full bg-white rounded-lg overflow-hidden">
               <thead className="bg-gray-50">
                 <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Numéro</th>
                   {isAdmin && (
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Entreprise</th>
                   )}
@@ -362,9 +362,9 @@ export default function Departements() {
               </thead>
               <tbody className="divide-y divide-gray-200">
                 {departements.length > 0 ? (
-                  departements.map((departement) => (
+                  departements.map((departement, index) => (
                     <tr key={departement.id_departement} className="hover:bg-gray-50">
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{departement.id_departement}</td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{index + 1}</td>
                       {isAdmin && (
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{getEntrepriseName(departement.id_company)}</td>
                       )}

@@ -90,11 +90,11 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
         icon: FaUsers,
         path: "/Employes"
       },
-      {
-        title: "Présences en temps réel",
-        icon: FaClipboardList,
-        path: "/presences-temps-reel"
-      },
+      // {
+      //   title: "Présences en temps réel",
+      //   icon: FaClipboardList,
+      //   path: "/presences-temps-reel"
+      // },
       {
         title: "Gestion des Plannings",
         icon: FaCalendarAlt,

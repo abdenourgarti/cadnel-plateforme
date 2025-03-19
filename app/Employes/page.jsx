@@ -262,7 +262,8 @@ export default function Employes() {
       id_poste: '',
       id_zone: '',
       id_planning: '',
-      id_company: isAdmin ? '' : currentUser.companyId
+      id_company: isAdmin ? '' : currentUser.companyId,
+      datedebutrotation: null,
     },
     validationSchema: employeSchema,
     onSubmit: async (values) => {
@@ -275,6 +276,7 @@ export default function Employes() {
           id_zone: Number(values.id_zone),
           id_planning: Number(values.id_planning),
           id_company: Number(values.id_company),
+          datedebutrotation: values.datedebutrotation || null
         };
         
         console.log('paramètres:', formattedValues);

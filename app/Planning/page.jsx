@@ -92,22 +92,24 @@ export default function Plannings() {
   const [currentUser, setCurrentUser] = useState({ role: '', companyId: '' });
   const [joursLocaux, setJoursLocaux] = useState([]);
 
+  // Correction ici: on définit isAdmin en fonction de currentUser.role
   const isAdmin = currentUser?.role === 'admin';
 
+  // Premier useEffect qui récupère l'utilisateur et charge les données appropriées
   useEffect(() => {
+    // Récupérer l'utilisateur actuel depuis localStorage
     if (typeof window !== 'undefined') {
       const user = getCurrentUser();
       setCurrentUser(user);
+      
+      // Charger les plannings ou les entreprises en fonction du rôle de l'utilisateur
+      if (user?.role === 'admin') {
+        fetchEntreprises();
+      } else if (user?.companyId) {
+        fetchPlannings(user.companyId);
+      }
     }
-  }, []);
-
-  useEffect(() => {
-    if (isAdmin) {
-      fetchEntreprises();
-    } else {
-      fetchPlannings(currentUser.companyId);
-    }
-  }, [isAdmin, currentUser.companyId]);
+  }, []); // Dépendance vide pour s'exécuter une seule fois au montage
 
   const fetchEntreprises = async () => {
     try {
@@ -125,6 +127,8 @@ export default function Plannings() {
   };
 
   const fetchPlannings = async (companyId) => {
+    if (!companyId) return; // Ne pas faire l'appel si companyId est vide
+    
     try {
       setLoading(true);
       const response = await axios.get(`http://localhost:5000/api/planning/${companyId}`, {
@@ -458,7 +462,16 @@ export default function Plannings() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
-              {plannings.length === 0 ? (
+              {loading ? (
+                <tr>
+                  <td 
+                    colSpan={isAdmin ? 6 : 5} 
+                    className="px-6 py-4 text-center text-sm text-gray-500"
+                  >
+                    Chargement...
+                  </td>
+                </tr>
+              ) : plannings.length === 0 ? (
                 <tr>
                   <td 
                     colSpan={isAdmin ? 6 : 5} 
